@@ -1,6 +1,7 @@
 from setuptools import find_packages, setup
 from os import path
 
+TESTS_REQUIRE=['pytest']
 setup(
     name='basic_interpreter',
     # Versions should comply with PEP440.  For a discussion on single-sourcing
@@ -11,6 +12,10 @@ setup(
     packages=find_packages(),
 
     install_requires=[],
+    extras_require={
+        'test': TESTS_REQUIRE,
+    },
+    tests_require=TESTS_REQUIRE,
 
     # If there are data files included in your packages that need to be
     # installed, specify them here.

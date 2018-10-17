@@ -13,16 +13,20 @@ class Tokenizer(EventDrivenModule):
         }
 
     def ascii_character_handler(self, event):
-        assert not len(self.character_queue) or self.character_queue[0].isalpha(), 'character found in a number'
+        assert not self.character_queue or self.character_queue[0].isalpha(), 'character found in a number'
         self.character_queue.append(event[0])
 
     def ascii_digit_handler(self, event):
         self.character_queue.append(event[0])
 
-    def ascii_delimiter_or_ctrl_handler(self, event):  # FIXME handle EOF
-        self.add_external_event(('identifier', ''.join(self.character_queue)))
-        self.character_queue = []
+    def ascii_delimiter_or_ctrl_handler(self, event):
+        if self.character_queue:
+            self.add_external_event(('identifier', ''.join(self.character_queue)))
+            self.character_queue = []
 
     def ascii_special_handler(self, event):
         self.ascii_delimiter_or_ctrl_handler(event)
-        self.add_external_event(('especial', event[1]))
+        self.add_external_event(('special', event[0]))
+
+    # TODO numbers
+    # TODO multi-char special (e.g. :=)

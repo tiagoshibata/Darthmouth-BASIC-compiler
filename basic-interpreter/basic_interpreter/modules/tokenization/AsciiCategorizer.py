@@ -1,7 +1,7 @@
 from basic_interpreter.modules.EventDrivenModule import EventDrivenModule
 
 
-class AsciiFilter(EventDrivenModule):
+class AsciiCategorizer(EventDrivenModule):
     def get_handlers(self):
         return {
             'ascii_line': self.ascii_line_handler,

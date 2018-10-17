@@ -10,18 +10,23 @@ class FileReader(EventDrivenModule):
         }
 
     def open_handler(self, event):
-        self.file = open(event[0])
-        self.add_event(('read'))
+        try:
+            self.file = open(event[0])
+        except FileNotFoundError as e:
+            import sys
+            print(e, file=sys.stderr)
+            raise SystemExit(1)
+        self.add_event(('read',))
 
     def read_handler(self, event):
         line = self.file.readline()
         if not line:
-            self.add_event(('close'))
+            self.add_event(('close',))
             return
         self.add_external_event(('ascii_line', line))
-        self.add_event(('read'))
+        self.add_event(('read',))
 
     def close_handler(self, event):
         self.file.close()
         self.file = None
-        self.add_external_event(('eof'))
+        self.add_external_event(('eof',))

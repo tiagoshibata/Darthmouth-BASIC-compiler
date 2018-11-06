@@ -36,6 +36,9 @@ from basic_interpreter.modules.tokenization.Tokenizer import Tokenizer
         call(('token_number', 3)),
         call(('token_ctrl', '\n')),
     ]),
+    (('ascii_line', '-1.23e-4\n'), [
+        call(('token_number', -1.23e-4)),
+    ]),
 ])
 def test_filters_ascii_chars(source_line, tokens):
     add_external_event = MagicMock()

@@ -3,6 +3,11 @@ from basic_interpreter.modules.EventDrivenModule import EventDrivenModule
 COMPOSED_SPECIAL = {'>=', '<='}
 
 
+def is_numeric_prefix(s):
+    '''Return whether s is a prefix of a number token (e.g. '+', '-2', '4', '1e').'''
+    return s and (s[0].isnumeric() or s[0] in {'+', '-'})
+
+
 class Tokenizer(EventDrivenModule):
     def get_handlers(self):
         self.character_queue = []
@@ -15,9 +20,9 @@ class Tokenizer(EventDrivenModule):
             'ascii_special': self.ascii_special_handler,
         }
 
+
     def ascii_character_handler(self, event):
         self.end_of_special()
-        assert not self.character_queue or self.character_queue[0].isalpha(), 'character found in a number'
         self.character_queue.append(event[0])
 
     def ascii_digit_handler(self, event):
@@ -30,10 +35,11 @@ class Tokenizer(EventDrivenModule):
 
     def end_of_identifier(self):
         if self.character_queue:
-            if self.character_queue[0].isalpha():
-                self.add_external_event(('token_identifier', ''.join(self.character_queue)))
+            if is_numeric_prefix(self.character_queue[0]):
+                # TODO validate number (e.g. 1e2e2 should be rejected)
+                self.add_external_event(('token_number', ''.join(self.character_queue)))
             else:
-                self.add_external_event(('token_number', int(''.join(self.character_queue))))
+                self.add_external_event(('token_identifier', ''.join(self.character_queue)))
             self.character_queue = []
 
     def end_of_special(self, event=''):

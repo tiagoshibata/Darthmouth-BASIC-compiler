@@ -1,4 +1,4 @@
-from basic_interpreter.modules.EventDrivenModule import EventDrivenModule
+from basic_compiler.modules.EventDrivenModule import EventDrivenModule
 
 
 class AsciiCategorizer(EventDrivenModule):

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from unittest.mock import call, MagicMock
 
-from basic_interpreter.modules.tokenization.AsciiCategorizer import AsciiCategorizer
+from basic_compiler.modules.tokenization.AsciiCategorizer import AsciiCategorizer
 
 
 def test_categorizes_ascii_chars():

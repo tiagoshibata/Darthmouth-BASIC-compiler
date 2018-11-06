@@ -3,8 +3,8 @@ from unittest.mock import call, MagicMock
 
 import pytest
 
-from basic_interpreter.modules.tokenization.AsciiCategorizer import AsciiCategorizer
-from basic_interpreter.modules.tokenization.Tokenizer import Tokenizer
+from basic_compiler.modules.tokenization.AsciiCategorizer import AsciiCategorizer
+from basic_compiler.modules.tokenization.Tokenizer import Tokenizer
 
 
 @pytest.mark.parametrize('source_line,tokens', [

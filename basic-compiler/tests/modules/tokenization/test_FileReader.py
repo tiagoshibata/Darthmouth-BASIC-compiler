@@ -2,7 +2,7 @@ from pathlib import Path
 
 from unittest.mock import call, MagicMock
 
-from basic_interpreter.modules.tokenization.FileReader import FileReader
+from basic_compiler.modules.tokenization.FileReader import FileReader
 
 base_dir = Path(__file__).resolve().parent
 

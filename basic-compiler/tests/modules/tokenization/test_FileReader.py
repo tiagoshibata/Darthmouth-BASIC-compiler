@@ -17,5 +17,5 @@ def test_reads_file():
         module.handle_event(event)
     add_external_event.assert_has_calls([
         *(call(('ascii_line', line)) for line in expected_lines),
-        call(('eof',)),
+        call(('eof', None)),
     ])

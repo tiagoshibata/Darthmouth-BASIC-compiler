@@ -2,10 +2,13 @@ from collections import deque
 
 
 class EventDrivenModule:
-    def __init__(self, add_external_event):
+    def __init__(self, add_external_event=None):
         self.add_external_event = add_external_event
         self.handlers = self.get_handlers()
         self.queue = deque()
+
+    def set_external_event_handler(self, add_external_event):
+        self.add_external_event = add_external_event
 
     def get_handlers(self):
         raise NotImplementedError()

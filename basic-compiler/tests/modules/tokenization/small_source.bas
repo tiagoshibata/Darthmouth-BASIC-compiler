@@ -1,0 +1,3 @@
+1 LET L = 2000
+10 DIM S(L)
+20 LET P = 2

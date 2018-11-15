@@ -1,42 +1,42 @@
-from basic_compiler.fsm import Fsm, State
+from basic_compiler.fsm import Fsm, State, Transition
 from basic_compiler.modules.EventDrivenModule import EventDrivenModule
 
 TRANSITION_TABLE = {
     'start': State(None, [
-        ('ascii_character', 'variable'),
-        ('ascii_digit', 'number'),
-        ('ascii_delimiter', 'delimiter'),
-        ('ascii_ctrl', 'end_of_line'),
-        (('ascii_special', '"'), 'string'),
-        (('ascii_special', '>'), 'greater_than'),
-        (('ascii_special', '<'), 'smaller_than'),
-        ('ascii_special', 'special'),
+        Transition('ascii_character', 'variable'),
+        Transition('ascii_digit', 'number'),
+        Transition('ascii_delimiter', 'delimiter'),
+        Transition('ascii_ctrl', 'end_of_line'),
+        Transition(('ascii_special', '"'), 'string'),
+        Transition(('ascii_special', '>'), 'greater_than'),
+        Transition(('ascii_special', '<'), 'smaller_than'),
+        Transition('ascii_special', 'special'),
     ]),
 
     'variable': State('variable', [
-        ('ascii_character', 'identifier'),
-        ('ascii_digit', 'variable_with_number'),
+        Transition('ascii_character', 'identifier'),
+        Transition('ascii_digit', 'variable_with_number'),
     ]),
     'variable_with_number': State('variable', [
-        ('ascii_character', 'invalid'),
-        ('ascii_digit', 'invalid'),
+        Transition('ascii_character', 'invalid'),
+        Transition('ascii_digit', 'invalid'),
     ]),
     'identifier': State('identifier', [
-        ('ascii_character', 'identifier'),
-        ('ascii_digit', 'invalid'),
+        Transition('ascii_character', 'identifier'),
+        Transition('ascii_digit', 'invalid'),
     ]),
     'invalid': State(None, []),
 
     'number': State('number', [
-        (('ascii_character', 'E'), 'scientific_notation_number'),
-        ('ascii_character', 'number'),
-        ('ascii_digit', 'number'),
-        (('ascii_special', '.'), 'number'),
+        Transition(('ascii_character', 'E'), 'scientific_notation_number'),
+        Transition('ascii_character', 'number'),
+        Transition('ascii_digit', 'number'),
+        Transition(('ascii_special', '.'), 'number'),
     ]),
     'scientific_notation_number': State(None, [
-        (('ascii_special', '+'), 'number'),
-        (('ascii_special', '-'), 'number'),
-        ('ascii_digit', 'number'),
+        Transition(('ascii_special', '+'), 'number'),
+        Transition(('ascii_special', '-'), 'number'),
+        Transition('ascii_digit', 'number'),
     ]),
 
     'delimiter': State('delimiter', []),
@@ -44,24 +44,24 @@ TRANSITION_TABLE = {
 
     # String literals (in PRINT statements)
     'string': State(None, [
-        ('ascii_character', 'string'),
-        ('ascii_digit', 'string'),
-        ('ascii_delimiter', 'string'),
-        ('ascii_ctrl', 'invalid'),
-        (('ascii_special', '"'), 'end_of_string'),
-        ('ascii_special', 'string'),
+        Transition('ascii_character', 'string'),
+        Transition('ascii_digit', 'string'),
+        Transition('ascii_delimiter', 'string'),
+        Transition('ascii_ctrl', 'invalid'),
+        Transition(('ascii_special', '"'), 'end_of_string'),
+        Transition('ascii_special', 'string'),
     ]),
     'end_of_string': State('string', [
-        (('ascii_special', '"'), 'string'),  # escaped double quote
+        Transition(('ascii_special', '"'), 'string'),  # escaped double quote
     ]),
 
     # Multicharacter specials
     'greater_than': State('special', [
-        (('ascii_special', '='), 'special'),
+        Transition(('ascii_special', '='), 'special'),
     ]),
     'smaller_than': State('special', [
-        (('ascii_special', '='), 'special'),
-        (('ascii_special', '>'), 'special'),
+        Transition(('ascii_special', '='), 'special'),
+        Transition(('ascii_special', '>'), 'special'),
     ]),
     'special': State('special', []),
 }

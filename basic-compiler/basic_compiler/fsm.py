@@ -1,17 +1,23 @@
 from collections import namedtuple
 
 State = namedtuple('State', ['token_type', 'transitions'])
+Transition = namedtuple('Transition', ['event', 'to', 'semantic_action'], defaults=(None,))
 
 
 class FsmError(RuntimeError):
     pass
 
 
-def find_transition(transition_list, transition):
-    if isinstance(transition[1], str):
-        transition = (transition[0], transition[1].upper())  # make case insensitive comparisons
-    return next((target for condition, target in transition_list
-                 if condition == transition or isinstance(condition, str) and condition == transition[0]), None)
+def find_transition(transition_list, event):
+    if isinstance(event[1], str):
+        event = (event[0], event[1].upper())  # make case insensitive comparisons
+    transition = next((x for x in transition_list
+                       if x.event == event or isinstance(x.event, str) and x.event == event[0]), None)
+    if not transition:
+        return None
+    if transition.semantic_action:
+        transition.semantic_action(event)
+    return transition.to
 
 
 class Fsm:

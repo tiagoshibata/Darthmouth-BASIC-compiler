@@ -8,6 +8,8 @@ class FsmError(RuntimeError):
 
 
 def find_transition(transition_list, transition):
+    if isinstance(transition[1], str):
+        transition = (transition[0], transition[1].upper())  # make case insensitive comparisons
     return next((target for condition, target in transition_list
                  if condition == transition or isinstance(condition, str) and condition == transition[0]), None)
 

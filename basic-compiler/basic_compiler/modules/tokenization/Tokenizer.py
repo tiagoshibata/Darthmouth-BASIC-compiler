@@ -7,6 +7,7 @@ TRANSITION_TABLE = {
         ('ascii_digit', 'number'),
         ('ascii_delimiter', 'delimiter'),
         ('ascii_ctrl', 'end_of_line'),
+        (('ascii_special', '"'), 'string'),
         (('ascii_special', '>'), 'greater_than'),
         (('ascii_special', '<'), 'smaller_than'),
         ('ascii_special', 'special'),
@@ -17,13 +18,14 @@ TRANSITION_TABLE = {
         ('ascii_digit', 'variable_with_number'),
     ]),
     'variable_with_number': State('variable', [
-        ('ascii_character', 'identifier'),
-        ('ascii_digit', 'identifier'),
+        ('ascii_character', 'invalid'),
+        ('ascii_digit', 'invalid'),
     ]),
     'identifier': State('identifier', [
         ('ascii_character', 'identifier'),
-        ('ascii_digit', 'identifier'),
+        ('ascii_digit', 'invalid'),
     ]),
+    'invalid': State(None, []),
 
     'number': State('number', [
         (('ascii_character', 'E'), 'scientific_notation_number'),
@@ -39,6 +41,19 @@ TRANSITION_TABLE = {
 
     'delimiter': State('delimiter', []),
     'end_of_line': State('end_of_line', []),
+
+    # String literals (in PRINT statements)
+    'string': State(None, [
+        ('ascii_character', 'string'),
+        ('ascii_digit', 'string'),
+        ('ascii_delimiter', 'string'),
+        ('ascii_ctrl', 'invalid'),
+        (('ascii_special', '"'), 'end_of_string'),
+        ('ascii_special', 'string'),
+    ]),
+    'end_of_string': State('string', [
+        (('ascii_special', '"'), 'string'),  # escaped double quote
+    ]),
 
     # Multicharacter specials
     'greater_than': State('special', [

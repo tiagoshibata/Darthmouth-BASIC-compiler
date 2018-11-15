@@ -63,6 +63,7 @@ def test_filters_ascii_chars(source_line, tokens):
     (('ascii_line', 'X1\n'), ('variable', 'X1')),
     (('ascii_line', 'GO\n'), ('identifier', 'GO')),
     (('ascii_line', 'GOTO\n'), ('identifier', 'GOTO')),
+    (('ascii_line', 'SomeLongString\n'), ('identifier', 'SomeLongString')),
 ])
 def test_identifier_vs_variable(source_line, expected_call):
     add_external_event = MagicMock()
@@ -72,13 +73,3 @@ def test_identifier_vs_variable(source_line, expected_call):
     for event in categorizer:
         categorizer.handle_event(event)
     add_external_event.assert_has_calls([call(expected_call)])
-
-
-@pytest.mark.xfail(raises=FsmError)
-def test_fail_at_invalid_identifier():
-    add_external_event = MagicMock()
-    tokenizer = Tokenizer(add_external_event)
-    tokenizer.handle_event(('ascii_character', 'X'))
-    tokenizer.handle_event(('ascii_character', 'Y'))
-    tokenizer.handle_event(('ascii_digit', '0'))
-    tokenizer.handle_event(('ascii_ctrl', '\n'))

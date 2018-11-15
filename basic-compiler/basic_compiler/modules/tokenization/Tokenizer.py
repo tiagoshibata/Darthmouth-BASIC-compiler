@@ -17,14 +17,13 @@ TRANSITION_TABLE = {
         ('ascii_digit', 'variable_with_number'),
     ]),
     'variable_with_number': State('variable', [
-        ('ascii_character', 'invalid'),
-        ('ascii_digit', 'invalid'),
+        ('ascii_character', 'identifier'),
+        ('ascii_digit', 'identifier'),
     ]),
     'identifier': State('identifier', [
         ('ascii_character', 'identifier'),
-        ('ascii_digit', 'invalid'),
+        ('ascii_digit', 'identifier'),
     ]),
-    'invalid': State(None, []),
 
     'number': State('number', [
         (('ascii_character', 'E'), 'scientific_notation_number'),

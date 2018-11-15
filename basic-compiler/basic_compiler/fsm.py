@@ -1,6 +1,10 @@
 from collections import namedtuple
 
-State = namedtuple('State', ['is_final', 'transitions'])
+State = namedtuple('State', ['token_type', 'transitions'])
+
+
+class FsmError(RuntimeError):
+    pass
 
 
 def find_transition(transition_list, transition):
@@ -23,10 +27,10 @@ class Fsm:
         identified_token = None
         if next_state is None:
             # Longest path found
-            if not current_state.is_final:
-                raise RuntimeError('Lexer failed: No valid transition for {}'.format(event))
+            if not current_state.token_type:
+                raise FsmError('No valid transition for {}'.format(event))
             # Return token class and value
-            identified_token = (self.current_state_name, ''.join(self.current_token))
+            identified_token = (current_state.token_type, ''.join(self.current_token))
             self.reset()
             next_state = find_transition(self.states['start'].transitions, event)
         self.current_state_name = next_state

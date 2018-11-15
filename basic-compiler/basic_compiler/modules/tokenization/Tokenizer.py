@@ -3,7 +3,7 @@ from basic_compiler.modules.EventDrivenModule import EventDrivenModule
 
 TRANSITION_TABLE = {
     'start': State(None, [
-        ('ascii_character', 'identifier'),
+        ('ascii_character', 'variable'),
         ('ascii_digit', 'number'),
         ('ascii_delimiter', 'delimiter'),
         ('ascii_ctrl', 'end_of_line'),
@@ -12,10 +12,19 @@ TRANSITION_TABLE = {
         ('ascii_special', 'special'),
     ]),
 
+    'variable': State('variable', [
+        ('ascii_character', 'identifier'),
+        ('ascii_digit', 'variable_with_number'),
+    ]),
+    'variable_with_number': State('variable', [
+        ('ascii_character', 'invalid'),
+        ('ascii_digit', 'invalid'),
+    ]),
     'identifier': State('identifier', [
         ('ascii_character', 'identifier'),
-        ('ascii_digit', 'identifier'),
+        ('ascii_digit', 'invalid'),
     ]),
+    'invalid': State(None, []),
 
     'number': State('number', [
         (('ascii_character', 'E'), 'scientific_notation_number'),

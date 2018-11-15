@@ -3,6 +3,7 @@ from unittest.mock import call, MagicMock
 
 import pytest
 
+from basic_compiler.fsm import FsmError
 from basic_compiler.modules.tokenization.AsciiCategorizer import AsciiCategorizer
 from basic_compiler.modules.tokenization.Tokenizer import Tokenizer
 
@@ -11,9 +12,9 @@ from basic_compiler.modules.tokenization.Tokenizer import Tokenizer
     (('ascii_line', '1 IF S(P) = 0 THEN GOTO 3\n'), [
         call(('number', '1')),
         call(('identifier', 'IF')),
-        call(('identifier', 'S')),
+        call(('variable', 'S')),
         call(('special', '(')),
-        call(('identifier', 'P')),
+        call(('variable', 'P')),
         call(('special', ')')),
         call(('special', '=')),
         call(('number', '0')),
@@ -25,9 +26,9 @@ from basic_compiler.modules.tokenization.Tokenizer import Tokenizer
     (('ascii_line', '1 IF S2(P) <= -5 THEN GOTO 3\n'), [
         call(('number', '1')),
         call(('identifier', 'IF')),
-        call(('identifier', 'S2')),
+        call(('variable', 'S2')),
         call(('special', '(')),
-        call(('identifier', 'P')),
+        call(('variable', 'P')),
         call(('special', ')')),
         call(('special', '<=')),
         call(('special', '-')),
@@ -55,3 +56,29 @@ def test_filters_ascii_chars(source_line, tokens):
     for event in categorizer:
         categorizer.handle_event(event)
     add_external_event.assert_has_calls(tokens)
+
+
+@pytest.mark.parametrize('source_line,expected_call', [
+    (('ascii_line', 'A\n'), ('variable', 'A')),
+    (('ascii_line', 'X1\n'), ('variable', 'X1')),
+    (('ascii_line', 'GO\n'), ('identifier', 'GO')),
+    (('ascii_line', 'GOTO\n'), ('identifier', 'GOTO')),
+])
+def test_identifier_vs_variable(source_line, expected_call):
+    add_external_event = MagicMock()
+    tokenizer = Tokenizer(add_external_event)
+    categorizer = AsciiCategorizer(tokenizer.handle_event)
+    categorizer.handle_event(source_line)
+    for event in categorizer:
+        categorizer.handle_event(event)
+    add_external_event.assert_has_calls([call(expected_call)])
+
+
+@pytest.mark.xfail(raises=FsmError)
+def test_fail_at_invalid_identifier():
+    add_external_event = MagicMock()
+    tokenizer = Tokenizer(add_external_event)
+    tokenizer.handle_event(('ascii_character', 'X'))
+    tokenizer.handle_event(('ascii_character', 'Y'))
+    tokenizer.handle_event(('ascii_digit', '0'))
+    tokenizer.handle_event(('ascii_ctrl', '\n'))

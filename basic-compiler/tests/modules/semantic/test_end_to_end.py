@@ -45,6 +45,7 @@ def create_event_engine():
 @pytest.mark.parametrize('source_filename,expected_output', [
     ('empty.bas', ''),
     ('minimal.bas', ''),
+    ('data.bas', ''),
 ])
 def test_compiler_end_to_end(source_filename, expected_output):
     event_engine = EventEngine([

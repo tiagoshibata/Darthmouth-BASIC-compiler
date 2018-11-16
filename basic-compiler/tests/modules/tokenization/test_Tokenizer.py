@@ -87,8 +87,6 @@ def test_fail_at_invalid_identifier():
 @pytest.mark.parametrize('source_line,expected_call', [
     (('ascii_line', '"String 0 X1 y14"\n'), ('string', '"String 0 X1 y14"')),
     (('ascii_line', '"String with ""escaped double quote"""\n'), ('string', '"String with ""escaped double quote"""')),
-    # (('ascii_line', 'GO\n'), ('identifier', 'GO')),
-    # (('ascii_line', 'GOTO\n'), ('identifier', 'GOTO')),
 ])
 def test_string(source_line, expected_call):
     add_external_event = MagicMock()
@@ -113,3 +111,20 @@ def test_invalid_string(source_line):
     tokenizer.handle_event(('eof', None))
     for event in categorizer:
         categorizer.handle_event(event)
+
+
+@pytest.mark.parametrize('source_line,expected_call', [
+    (('ascii_line', '10\n'), [call(('number', '10'))]),
+    (('ascii_line', '-20\n'), [call(('special', '-')), call(('number', '20'))]),
+    (('ascii_line', '30\n'), [call(('number', '30'))]),
+    (('ascii_line', '3.14E-0\n'), [call(('number', '3.14E-0'))]),
+    (('ascii_line', '-.5\n'), [call(('special', '-')), call(('number', '.5'))]),
+])
+def test_numbers(source_line,expected_call):
+    add_external_event = MagicMock()
+    tokenizer = Tokenizer(add_external_event)
+    categorizer = AsciiCategorizer(tokenizer.handle_event)
+    categorizer.handle_event(source_line)
+    for event in categorizer:
+        categorizer.handle_event(event)
+    add_external_event.assert_has_calls(expected_call)

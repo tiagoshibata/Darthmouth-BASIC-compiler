@@ -7,6 +7,7 @@ TRANSITION_TABLE = {
         Transition('ascii_digit', 'number'),
         Transition('ascii_delimiter', 'delimiter'),
         Transition('ascii_ctrl', 'end_of_line'),
+        Transition(('ascii_special', '.'), 'number'),
         Transition(('ascii_special', '"'), 'string'),
         Transition(('ascii_special', '>'), 'greater_than'),
         Transition(('ascii_special', '<'), 'smaller_than'),

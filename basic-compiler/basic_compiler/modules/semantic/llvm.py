@@ -19,7 +19,7 @@ class Function:
     def to_ll(self):
         if not self.instructions:
             # Function bodies with no basic blocks are invalid, so return nothing instead of an empty function
-            return "; {} @{}({}) removed because it's empty".format(self.return_type, self.name, self.arguments)
+            return "; {} @{}({}) omitted because it's empty".format(self.return_type, self.name, self.arguments)
         if self.instructions[-1].lstrip().split()[0] not in ('ret', 'undefined'):
             # Add a terminator if the body doesn't end with one
             self.instructions.append('musttail call void @exit(i32 0) noreturn nounwind')
@@ -51,6 +51,7 @@ class LlvmIrGenerator:
         self.functions = [program, main]
 
         self.referenced_functions = set()
+        self.const_data = []
         self.defined_labels = set()
         self.referenced_labels = set()
         self.call_targets = set()
@@ -67,6 +68,13 @@ class LlvmIrGenerator:
             self.functions[1].instructions.insert(0, 'musttail call void @program(i8* blockaddress(@program, %{})) #0'.format(label))
         self.defined_labels.add(identifier)
         self.functions[0].append('{}:'.format(label))
+
+    def data_start(self, value):
+        self.functions[0].append('@llvm.donothing()')
+
+    def data_item(self, value):
+        # TODO validate value
+        self.const_data.append(value)
 
     def goto(self, target):
         self.referenced_labels.add(target)
@@ -104,8 +112,14 @@ class LlvmIrGenerator:
             call_label_list = ', '.join(('label %label_{}'.format(x) for x in self.call_targets))
             self.functions[0].instructions.insert(0, 'indirectbr i8* %target_label, [ {} ]'.format(call_label_list))
 
+        header = ['source_filename = "{}"\n'.format(self.filename)]
+
+        if self.const_data:
+            data_array = '[{}]'.format(', '.join('float {}'.format(float(x)) for x in self.const_data))
+            header.append('@DATA = constant [{} x float] {}'.format(len(self.const_data), data_array))
+
         return '\n'.join((
-            'source_filename = "{}"\n'.format(self.filename),
+            *header,
             '\n'.join(x.to_ll() for x in self.functions),
             LLVM_TAIL,
         ))

@@ -3,8 +3,14 @@ import io
 from pathlib import Path
 from unittest.mock import call, MagicMock
 
+import pytest
+
 from basic_compiler.modules.syntax_recognizer.SyntaxRecognizer import SyntaxRecognizer
-from basic_compiler.modules.semantic.llvm import LLVM_TAIL
+from basic_compiler.modules.semantic.llvm import LLVM_TAIL, SemanticError
+
+
+def assert_source_matches(source, desired):
+    assert source.replace('\n\n', '\n') ==  desired + LLVM_TAIL.replace('\n\n', '\n')
 
 
 def test_empty_program():
@@ -14,13 +20,12 @@ def test_empty_program():
             syntax_recognizer.handle_event(('open', 'source.bas'))
             syntax_recognizer.handle_event(('eof', None))
         s = f.getvalue()
-    assert s.replace('\n\n', '\n') ==  '''source_filename = "source.bas"
-; void @program(i8* %target_label) removed because it's empty
+    assert_source_matches(s, '''source_filename = "source.bas"
+; void @program(i8* %target_label) omitted because it's empty
 define dso_local i32 @main() local_unnamed_addr #1 {
   ret i32 0
 }
-''' + LLVM_TAIL.replace('\n\n', '\n')
-
+''')
 
 
 def test_minimal_program():
@@ -33,7 +38,7 @@ def test_minimal_program():
             syntax_recognizer.handle_event(('end_of_line', '\n'))
             syntax_recognizer.handle_event(('eof', None))
         s = f.getvalue()
-    assert s.replace('\n\n', '\n') ==  '''source_filename = "source.bas"
+    assert_source_matches(s,  '''source_filename = "source.bas"
 define dso_local void @program(i8* %target_label) local_unnamed_addr #0 {
   indirectbr i8* %target_label, [ label %label_100 ]
   label_100:
@@ -43,4 +48,54 @@ define dso_local i32 @main() local_unnamed_addr #1 {
   musttail call void @program(i8* blockaddress(@program, %label_100)) #0
   ret i32 0
 }
-''' + LLVM_TAIL.replace('\n\n', '\n')
+''')
+
+
+@pytest.mark.xfail(raises=SemanticError)
+def test_undefined_label():
+    syntax_recognizer = SyntaxRecognizer(None)
+    syntax_recognizer.handle_event(('open', 'source.bas'))
+    syntax_recognizer.handle_event(('number', '100'))
+    syntax_recognizer.handle_event(('identifier', 'goto'))
+    syntax_recognizer.handle_event(('number', '200'))
+    syntax_recognizer.handle_event(('end_of_line', '\n'))
+    syntax_recognizer.handle_event(('eof', None))
+
+# TODO test undefined functions
+
+
+def test_data():
+    syntax_recognizer = SyntaxRecognizer(None)
+    with io.StringIO() as f:
+        with redirect_stdout(f):
+            syntax_recognizer.handle_event(('open', 'source.bas'))
+            syntax_recognizer.handle_event(('number', '100'))
+            syntax_recognizer.handle_event(('identifier', 'data'))
+            syntax_recognizer.handle_event(('number', '10'))
+            syntax_recognizer.handle_event(('special', ','))
+            syntax_recognizer.handle_event(('special', '-'))
+            syntax_recognizer.handle_event(('number', '20'))
+            syntax_recognizer.handle_event(('special', ','))
+            syntax_recognizer.handle_event(('special', '+'))
+            syntax_recognizer.handle_event(('number', '30'))
+            syntax_recognizer.handle_event(('special', ','))
+            syntax_recognizer.handle_event(('number', '3.14e-0'))
+            syntax_recognizer.handle_event(('special', ','))
+            syntax_recognizer.handle_event(('number', '-.5'))
+            syntax_recognizer.handle_event(('end_of_line', '\n'))
+            syntax_recognizer.handle_event(('eof', None))
+        s = f.getvalue()
+    assert_source_matches(s,  '''source_filename = "source.bas"
+@DATA = constant [5 x float] [float 10.0, float -20.0, float 30.0, float 3.14, float -0.5]
+define dso_local void @program(i8* %target_label) local_unnamed_addr #0 {
+  indirectbr i8* %target_label, [ label %label_100 ]
+  label_100:
+  @llvm.donothing()
+  musttail call void @exit(i32 0) noreturn nounwind
+  unreachable
+}
+define dso_local i32 @main() local_unnamed_addr #1 {
+  musttail call void @program(i8* blockaddress(@program, %label_100)) #0
+  ret i32 0
+}
+''')

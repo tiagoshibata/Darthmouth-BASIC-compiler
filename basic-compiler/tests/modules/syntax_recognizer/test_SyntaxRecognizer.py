@@ -15,8 +15,7 @@ def test_empty_program():
             syntax_recognizer.handle_event(('eof', None))
         s = f.getvalue()
     assert s.replace('\n\n', '\n') ==  '''source_filename = "source.bas"
-define dso_local void @program(i8* %target_label) local_unnamed_addr #0 {
-}
+; void @program(i8* %target_label) removed because it's empty
 define dso_local i32 @main() local_unnamed_addr #1 {
   ret i32 0
 }

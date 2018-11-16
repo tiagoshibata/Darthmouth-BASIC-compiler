@@ -25,8 +25,11 @@ lli = pytest.mark.skipif(not lli_version(), reason="LLVM interpreter lli not fou
 
 
 def lli_run(source):
-    completed_process = subprocess.run(['lli'], input=source, capture_output=True, text=True, check=True)
-    assert completed_process.returncode == 0, 'lli returned non-zero status'
+    completed_process = subprocess.run(['lli'], input=source, capture_output=True, text=True)
+    # Print formatted source (with numbered lines) if execution fails
+    assert completed_process.returncode == 0, '{}\nInput program:\n{}'.format(
+        completed_process.stderr,
+        '\n'.join('{}: {}'.format(n + 1, s) for n, s in enumerate(source.splitlines())))
     return completed_process.stdout
 
 

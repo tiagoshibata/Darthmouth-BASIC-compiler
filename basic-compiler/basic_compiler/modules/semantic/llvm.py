@@ -17,6 +17,13 @@ class Function:
         self.instructions.append(instruction)
 
     def to_ll(self):
+        if not self.instructions:
+            # Function bodies with no basic blocks are invalid, so return nothing instead of an empty function
+            return "; {} @{}({}) removed because it's empty".format(self.return_type, self.name, self.arguments)
+        if self.instructions[-1].lstrip().split()[0] not in ('ret', 'undefined'):
+            # Add a terminator if the body doesn't end with one
+            self.instructions.append('musttail call void @exit(i32 0) noreturn nounwind')
+            self.instructions.append('unreachable')
         return '\n'.join((
             'define dso_local {} @{}({}) local_unnamed_addr {} {{'.format(self.return_type, self.name, self.arguments, self.attributes),
             '\n'.join(('  {}'.format(x) for x in self.instructions)),
@@ -80,7 +87,8 @@ class LlvmIrGenerator:
         self.functions[0].append('; {}'.format(text))
 
     def end(self, event):
-        self.functions[0].append('tail call void @exit(i32 0) noreturn nounwind')
+        self.functions[0].append('musttail call void @exit(i32 0) noreturn nounwind')
+        self.functions[0].append('unreachable')
 
     def to_ll(self):
         defined_functions = {x.name for x in self.functions}

@@ -1,6 +1,6 @@
 from collections import namedtuple
 
-State = namedtuple('State', ['token_type', 'transitions'])
+State = namedtuple('State', ['token_type', 'transitions'], defaults=(None, []))
 Transition = namedtuple('Transition', ['event', 'to', 'semantic_action'], defaults=([], None))
 
 
@@ -16,7 +16,7 @@ def find_transition(transition_list, event):
     if not transition:
         return None
     if transition.semantic_action:
-        transition.semantic_action(event)
+        transition.semantic_action(event[1])
     return transition.to
 
 

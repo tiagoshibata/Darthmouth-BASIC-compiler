@@ -11,6 +11,7 @@ TRANSITION_TABLE = {
         Transition(('ascii_special', '>'), 'greater_than'),
         Transition(('ascii_special', '<'), 'smaller_than'),
         Transition('ascii_special', 'special'),
+        Transition('eof', 'eof'),
     ]),
 
     'variable': State('variable', [
@@ -25,7 +26,7 @@ TRANSITION_TABLE = {
         Transition('ascii_character', 'identifier'),
         Transition('ascii_digit', 'invalid'),
     ]),
-    'invalid': State(None),
+    'invalid': State(),
 
     'number': State('number', [
         Transition(('ascii_character', 'E'), 'scientific_notation_number'),
@@ -64,6 +65,8 @@ TRANSITION_TABLE = {
         Transition(('ascii_special', '>'), 'special'),
     ]),
     'special': State('special'),
+
+    'eof': State(None),
 }
 
 # 'number': (True, [

@@ -25,7 +25,7 @@ TRANSITION_TABLE = {
         Transition('ascii_character', 'identifier'),
         Transition('ascii_digit', 'invalid'),
     ]),
-    'invalid': State(None, []),
+    'invalid': State(None),
 
     'number': State('number', [
         Transition(('ascii_character', 'E'), 'scientific_notation_number'),
@@ -39,8 +39,8 @@ TRANSITION_TABLE = {
         Transition('ascii_digit', 'number'),
     ]),
 
-    'delimiter': State('delimiter', []),
-    'end_of_line': State('end_of_line', []),
+    'delimiter': State('delimiter'),
+    'end_of_line': State('end_of_line'),
 
     # String literals (in PRINT statements)
     'string': State(None, [
@@ -63,7 +63,7 @@ TRANSITION_TABLE = {
         Transition(('ascii_special', '='), 'special'),
         Transition(('ascii_special', '>'), 'special'),
     ]),
-    'special': State('special', []),
+    'special': State('special'),
 }
 
 # 'number': (True, [

@@ -1,7 +1,7 @@
 from collections import namedtuple
 
 State = namedtuple('State', ['token_type', 'transitions'])
-Transition = namedtuple('Transition', ['event', 'to', 'semantic_action'], defaults=(None,))
+Transition = namedtuple('Transition', ['event', 'to', 'semantic_action'], defaults=([], None))
 
 
 class FsmError(RuntimeError):

@@ -86,11 +86,11 @@ def test_data():
             syntax_recognizer.handle_event(('eof', None))
         s = f.getvalue()
     assert_source_matches(s,  '''source_filename = "source.bas"
-@DATA = constant [5 x float] [float 10.0, float -20.0, float 30.0, float 3.14, float -0.5]
+@DATA = constant [5 x double] [double 10.0, double -20.0, double 30.0, double 3.14, double -0.5]
 define dso_local void @program(i8* %target_label) local_unnamed_addr #0 {
   indirectbr i8* %target_label, [ label %label_100 ]
   label_100:
-  @llvm.donothing()
+  call void @llvm.donothing() nounwind readnone
   musttail call void @exit(i32 0) noreturn nounwind
   unreachable
 }

@@ -31,7 +31,8 @@ class Function:
         ))
 
 # Text common to all generated LLVM IR files
-LLVM_TAIL = '''declare void @exit(i32) local_unnamed_addr noreturn nounwind
+LLVM_TAIL = '''declare void @llvm.donothing() nounwind readnone
+declare void @exit(i32) local_unnamed_addr noreturn nounwind
 
 attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
 attributes #1 = { norecurse nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
@@ -70,11 +71,13 @@ class LlvmIrGenerator:
         self.functions[0].append('{}:'.format(label))
 
     def data_start(self, value):
-        self.functions[0].append('@llvm.donothing()')
+        self.functions[0].append('call void @llvm.donothing() nounwind readnone')
 
     def data_item(self, value):
-        # TODO validate value
-        self.const_data.append(value)
+        try:
+            self.const_data.append(float(value))
+        except ValueError:
+            raise SemanticError('{} is not a valid number'.format(value))
 
     def goto(self, target):
         self.referenced_labels.add(target)
@@ -115,8 +118,8 @@ class LlvmIrGenerator:
         header = ['source_filename = "{}"\n'.format(self.filename)]
 
         if self.const_data:
-            data_array = '[{}]'.format(', '.join('float {}'.format(float(x)) for x in self.const_data))
-            header.append('@DATA = constant [{} x float] {}'.format(len(self.const_data), data_array))
+            data_array = '[{}]'.format(', '.join('double {}'.format(float(x)) for x in self.const_data))
+            header.append('@DATA = constant [{} x double] {}'.format(len(self.const_data), data_array))
 
         return '\n'.join((
             *header,

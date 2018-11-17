@@ -53,6 +53,7 @@ class LlvmIrGenerator:
 
         self.referenced_functions = set()
         self.const_data = []
+        self.uses_read = False
         self.defined_labels = set()
         self.referenced_labels = set()
         self.call_targets = set()
@@ -70,7 +71,12 @@ class LlvmIrGenerator:
         self.defined_labels.add(identifier)
         self.functions[0].append('{}:'.format(label))
 
-    def data_start(self, value):
+    def read_item(self, values):
+        self.uses_read = True
+        self.functions[0].append('getelementptr inbounds [n x double], [n x double]* @DATA, i32 0, i32 @data_index')
+        self.functions[0].append('@data_index = add i32 @data_index, 1')
+
+    def data_start(self, _):
         self.functions[0].append('call void @llvm.donothing() nounwind readnone')
 
     def data_item(self, value):
@@ -111,15 +117,23 @@ class LlvmIrGenerator:
         if undefined_labels:
             raise SemanticError('Undefined labels: {}'.format(undefined_labels))
 
+        if self.uses_read and not self.const_data:
+            raise SemanticError('Code has READ statements, but no DATA statement')
+
         if self.call_targets:
             call_label_list = ', '.join(('label %label_{}'.format(x) for x in self.call_targets))
             self.functions[0].instructions.insert(0, 'indirectbr i8* %target_label, [ {} ]'.format(call_label_list))
 
-        header = ['source_filename = "{}"\n'.format(self.filename)]
+        header = [
+            'source_filename = "{}"\n'.format(self.filename),
+        ]
 
         if self.const_data:
             data_array = '[{}]'.format(', '.join('double {}'.format(float(x)) for x in self.const_data))
-            header.append('@DATA = constant [{} x double] {}'.format(len(self.const_data), data_array))
+            header.append(
+                '@data_index = dso_local local_unnamed_addr global i32 0\n'
+                '@DATA = dso_local local_unnamed_addr constant [{} x double] {}'.format(len(self.const_data), data_array)
+            )
 
         return '\n'.join((
             *header,

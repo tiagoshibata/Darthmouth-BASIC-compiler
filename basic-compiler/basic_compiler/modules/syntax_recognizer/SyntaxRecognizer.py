@@ -32,7 +32,11 @@ class SyntaxRecognizer(EventDrivenModule):
 
             'let': State(None, []),  # TODO
             'read': State(None, [
-
+                Transition('variable', 'end_of_read', self.ir_generator.read_item),
+            ]),
+            'end_of_read': State(None, [
+                Transition(('special', ','), 'read'),
+                Transition('end_of_line', 'start'),
             ]),
             'data': State(None, [
                 Transition(('special', '+'), '+data'),

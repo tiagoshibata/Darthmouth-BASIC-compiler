@@ -150,10 +150,11 @@ class LlvmIrGenerator:
         self.state.external_symbols.add('putchar')
         self.program.append('tail call i32 @putchar(i32 10)')
 
-    def const_string(self, literal):
+    def const_string(self, literal, newline=False):
         # Create a constant null-terminated string, global to this module
         string_constant_identifier = '@.str{}'.format(len(self.state.private_globals))
-        string_length = len(literal) + 1
+        # Add one byte for the null-terminator and don't count escape sequences
+        string_length = len(literal) + 1 - 2 * literal.count('\\')
         self.state.private_globals.append('{} = private unnamed_addr constant [{} x i8] c"{}\\00", align 1'.format(string_constant_identifier, string_length, literal))
         return string_constant_identifier, string_length
 
@@ -168,10 +169,10 @@ class LlvmIrGenerator:
         for element in self.state.print_parameters:
             if element.startswith('"'):
                 # Unescape double quotes
-                element = element[1:-1].replace('""', '\\"')
+                element = element[1:-1].replace('""', '\\22').replace('\\', '\\5C')
                 format_parameters.append('%s')
                 # Create a constant string
-                str_id, str_len = const_string(element)
+                str_id, str_len = self.const_string(element)
                 va_args.append('i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {str_id}, i64 0, i64 0)'.format(len=str_len, str_id=str_id))
             else:
                 self.state.variables.add(element)
@@ -180,8 +181,7 @@ class LlvmIrGenerator:
                 self.program.append('{} = load double, double* @{}, align 8'.format(load_tmp, element))
                 va_args.append(load_tmp)
 
-        format_string = '{}{}\\0A'.format(' '.join(format_parameters), suffix)
-        format_string_id, length = const_string(format_string)
+        format_string_id, length = self.const_string(' '.join(format_parameters) + suffix)
         self.program.append(
             'tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {identifier}, i64 0, i64 0), '
             '{va_args})'.format(
@@ -190,8 +190,8 @@ class LlvmIrGenerator:
                 va_args=', '.join(va_args),
             ))
 
-    def print_end_with_newline(self):
-        print_end(None, suffix='\n')
+    def print_end_with_newline(self, _):
+        self.print_end(_, suffix='\\0A')
 
     def goto(self, target):
         target = label_to_int(target)

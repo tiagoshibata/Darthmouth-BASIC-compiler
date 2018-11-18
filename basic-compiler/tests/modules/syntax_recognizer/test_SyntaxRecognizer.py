@@ -61,6 +61,30 @@ def test_undefined_label():
     syntax_recognizer.handle_event(('end_of_line', '\n'))
     syntax_recognizer.handle_event(('eof', None))
 
+
+@pytest.mark.xfail(raises=SemanticError)
+def test_undefined_label_at_gosub():
+    syntax_recognizer = SyntaxRecognizer(None)
+    syntax_recognizer.handle_event(('open', 'source.bas'))
+    syntax_recognizer.handle_event(('number', '100'))
+    syntax_recognizer.handle_event(('identifier', 'gosub'))
+    syntax_recognizer.handle_event(('number', '200'))
+    syntax_recognizer.handle_event(('end_of_line', '\n'))
+    syntax_recognizer.handle_event(('eof', None))
+
+
+@pytest.mark.xfail(raises=SemanticError)
+def test_duplicate_label():
+    syntax_recognizer = SyntaxRecognizer(None)
+    syntax_recognizer.handle_event(('open', 'source.bas'))
+    syntax_recognizer.handle_event(('number', '100'))
+    syntax_recognizer.handle_event(('identifier', 'return'))
+    syntax_recognizer.handle_event(('end_of_line', '\n'))
+    syntax_recognizer.handle_event(('number', '100'))
+    syntax_recognizer.handle_event(('identifier', 'return'))
+    syntax_recognizer.handle_event(('end_of_line', '\n'))
+    syntax_recognizer.handle_event(('eof', None))
+
 # TODO test undefined functions
 
 

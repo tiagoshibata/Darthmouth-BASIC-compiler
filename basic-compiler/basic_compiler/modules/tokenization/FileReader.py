@@ -23,7 +23,7 @@ class FileReader(EventDrivenModule):
         if not line:
             self.add_event(('close',))
             return
-        self.add_external_event(('ascii_line', line.upper()))
+        self.add_external_event(('ascii_line', line))
         self.add_event(('read',))
 
     def close_handler(self, event):

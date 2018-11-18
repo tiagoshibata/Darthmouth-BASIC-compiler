@@ -91,7 +91,6 @@ def test_data():
 define dso_local void @program(i8* %target_label) local_unnamed_addr #0 {
   indirectbr i8* %target_label, [ label %label_100 ]
   label_100:
-  call void @llvm.donothing() nounwind readnone
   musttail call void @exit(i32 0) noreturn nounwind
   unreachable
 }

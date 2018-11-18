@@ -15,7 +15,7 @@ class SyntaxRecognizer(EventDrivenModule):
             'statement': State(None, [
                 Transition(('identifier', 'LET'), 'let'),
                 Transition(('identifier', 'READ'), 'read'),
-                Transition(('identifier', 'DATA'), 'data', self.ir_generator.data_start),
+                Transition(('identifier', 'DATA'), 'data'),
                 Transition(('identifier', 'PRINT'), 'print'),
                 Transition(('identifier', 'GO'), 'go'),
                 Transition(('identifier', 'GOTO'), 'goto'),

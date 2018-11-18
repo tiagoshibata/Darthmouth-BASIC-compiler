@@ -5,6 +5,14 @@ class SemanticError(RuntimeError):
     pass
 
 
+def is_block_terminator(instruction):
+    if not isinstance(instruction, str):
+        return False  # not known yet
+    opcode = instruction.lstrip().split()[0]
+    return opcode in (
+        'ret', 'br', 'switch', 'indirectbr', 'invoke', 'resume', 'catchswitch', 'catchret', 'cleanupret', 'unreachable')
+
+
 class Function:
     def __init__(self, name, return_type='void', arguments='', attributes='#0'):
         self.return_type = return_type
@@ -27,7 +35,7 @@ class Function:
         if not instructions:
             # Function bodies with no basic blocks are invalid, so return nothing instead of an empty function
             return "; {} @{}({}) omitted because it's empty".format(self.return_type, self.name, self.arguments)
-        if instructions[-1].lstrip().split()[0] not in ('ret', 'undefined'):
+        if not is_block_terminator(instructions[-1]):
             # Add a terminator if the body doesn't end with one
             instructions.append('musttail call void @exit(i32 0) noreturn nounwind')
             instructions.append('unreachable')
@@ -38,8 +46,7 @@ class Function:
         ))
 
 # Text common to all generated LLVM IR files
-LLVM_TAIL = '''declare void @llvm.donothing() nounwind readnone
-declare void @exit(i32) local_unnamed_addr noreturn nounwind
+LLVM_TAIL = '''declare void @exit(i32) local_unnamed_addr noreturn nounwind
 
 attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
 attributes #1 = { norecurse nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
@@ -88,17 +95,22 @@ class Program(Function):
         self.append(indirect_branch)
 
 
+def label_to_int(identifier):
+    try:
+        return int(identifier)
+    except ValueError:
+        raise SemanticError('Label is not valid: {}'.format(identifier))
+
+
 class LlvmIrGenerator:
     def __init__(self, filename):
         self.state = SemanticState(os.path.basename(filename))
         self.program = Program()
         self.state.functions.extend((self.program, Main()))
 
+
     def label(self, identifier):
-        try:
-            identifier = int(identifier)
-        except ValueError:
-            raise SemanticError('Label is not valid: {}'.format(identifier))
+        identifier = label_to_int(identifier)
         if identifier in self.state.defined_labels:
             raise SemanticError('Duplicate label {}'.format(identifier))
         label = 'label_{}'.format(identifier)
@@ -106,7 +118,8 @@ class LlvmIrGenerator:
             # First label is the entry point
             self.state.entry_point = identifier
         self.state.defined_labels.add(identifier)
-        self.program.append(lambda state: ('br label %{}'.format(label) if identifier in state.goto_targets | state.gosub_targets else None))
+        if not is_block_terminator(self.program.instructions[-1]):
+            self.program.append(lambda state: ('br label %{}'.format(label) if identifier in state.goto_targets | state.gosub_targets else None))
         self.program.append(lambda state: ('{}:'.format(label) if identifier in state.goto_targets | state.gosub_targets | {state.entry_point} else None))
 
     def read_item(self, variable):
@@ -121,10 +134,6 @@ class LlvmIrGenerator:
         self.program.append('store i32 %i{}_inc, i32* @data_index, align 4'.format(i))
         self.state.read_count += 1
 
-    def data_start(self, _):
-        # TODO only add if necessary. Add block terminator if needed
-        self.program.append('call void @llvm.donothing() nounwind readnone')
-
     def data_item(self, value):
         try:
             self.state.const_data.append(float(value))
@@ -132,6 +141,7 @@ class LlvmIrGenerator:
             raise SemanticError('{} is not a valid number'.format(value))
 
     def goto(self, target):
+        target = label_to_int(target)
         self.state.goto_targets.add(target)
         self.program.append('br label %label_{}'.format(target))
 
@@ -139,6 +149,7 @@ class LlvmIrGenerator:
         pass
 
     def gosub(self, target):
+        target = label_to_int(target)
         self.state.gosub_targets.add(target)
         self.program.append('tail call void %label_{}()'.format(target))
 

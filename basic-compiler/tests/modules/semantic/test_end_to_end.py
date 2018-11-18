@@ -47,6 +47,7 @@ def create_event_engine():
     ('minimal.bas', ''),
     ('data.bas', ''),
     ('read.bas', ''),
+    ('jump_to_data.bas', ''),
 ])
 def test_compiler_end_to_end(source_filename, expected_output):
     event_engine = EventEngine([

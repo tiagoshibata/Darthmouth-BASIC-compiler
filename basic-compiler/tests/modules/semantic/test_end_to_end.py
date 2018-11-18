@@ -29,7 +29,7 @@ def lli_run(source):
     # Print formatted source (with numbered lines) if execution fails
     assert completed_process.returncode == 0, '{}\nInput program:\n{}'.format(
         completed_process.stderr,
-        '\n'.join('{}: {}'.format(n + 1, s) for n, s in enumerate(source.splitlines())))
+        '\n'.join('{: <2}: {}'.format(n + 1, s) for n, s in enumerate(source.splitlines())))
     return completed_process.stdout
 
 
@@ -46,6 +46,7 @@ def create_event_engine():
     ('empty.bas', ''),
     ('minimal.bas', ''),
     ('data.bas', ''),
+    ('read.bas', ''),
 ])
 def test_compiler_end_to_end(source_filename, expected_output):
     event_engine = EventEngine([

@@ -6,6 +6,9 @@ from basic_compiler.modules.semantic.llvm import LlvmIrGenerator
 class SyntaxRecognizer(EventDrivenModule):
     def open_handler(self, event):
         self.ir_generator = LlvmIrGenerator(event[0])
+        exp_fsm = Fsm({
+
+        })
         self.fsm = Fsm({
             'start': State(None, [
                 Transition('number', 'statement', self.ir_generator.label),
@@ -30,7 +33,8 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition(('identifier', 'END'), 'end', self.ir_generator.end),
             ]),
 
-            'let': State(None, []),  # TODO
+            'let': State(None),  # TODO
+
             'read': State(None, [
                 Transition('variable', 'end_of_read', self.ir_generator.read_item),
             ]),
@@ -38,6 +42,7 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition(('special', ','), 'read'),
                 Transition('end_of_line', 'start'),
             ]),
+
             'data': State(None, [
                 Transition(('special', '+'), '+data'),
                 Transition(('special', '-'), '-data'),
@@ -53,20 +58,37 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition(('special', ','), 'data'),
                 Transition('end_of_line', 'start'),
             ]),
-            'print': State(None, [
 
+            'print': State(None, [
+                Transition('end_of_line', 'start', self.ir_generator.print_newline),
+                Transition('string', 'print_string', self.ir_generator.print),
+                Transition(exp_fsm, 'print_after_exp'),  # TODO
             ]),
+            'print_string': State(None, [
+                Transition(('special', ','), 'print_after_comma'),
+                Transition('end_of_line', 'start', self.ir_generator.print_end_with_newline),
+                Transition(exp_fsm, 'print_after_exp'),  # TODO
+            ]),
+            'print_after_comma': State(None, [
+                Transition('end_of_line', 'start', self.ir_generator.print_end),
+                Transition(exp_fsm, 'print_after_exp'),  # TODO
+            ]),
+            'print_after_exp': State(None, [
+                Transition(('special', ','), 'print_after_comma'),
+                Transition('end_of_line', 'start', self.ir_generator.print_end_with_newline),
+            ]),
+
             'go': State(None, [
                 Transition(('identifier', 'TO'), 'goto'),
             ]),
             'goto': State(None, [
                 Transition('number', 'end', self.ir_generator.goto),
             ]),
-            'if': State(None, []),  # TODO
-            'for': State(None, []),  # TODO
-            'next': State(None, []),  # TODO
-            'dim': State(None, []),  # TODO
-            'def': State(None, []),  # TODO
+            'if': State(None),  # TODO
+            'for': State(None),  # TODO
+            'next': State(None),  # TODO
+            'dim': State(None),  # TODO
+            'def': State(None),  # TODO
             'gosub': State(None, [
                 Transition('number', 'end', self.ir_generator.gosub),
             ]),

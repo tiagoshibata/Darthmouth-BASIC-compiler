@@ -37,6 +37,7 @@ class Function:
             return "; {} @{}({}) omitted because it's empty".format(self.return_type, self.name, self.arguments)
         if not is_block_terminator(instructions[-1]):
             # Add a terminator if the body doesn't end with one
+            final_semantic_state.external_symbols.add('exit')
             instructions.append('musttail call void @exit(i32 0) noreturn nounwind')
             instructions.append('unreachable')
         return '\n'.join((
@@ -46,9 +47,7 @@ class Function:
         ))
 
 # Text common to all generated LLVM IR files
-LLVM_TAIL = '''declare void @exit(i32) local_unnamed_addr noreturn nounwind
-
-attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
+LLVM_TAIL = '''attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
 attributes #1 = { norecurse nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
 
 !llvm.ident = !{!0}
@@ -65,8 +64,16 @@ class SemanticState:
         self.goto_targets = set()
         self.gosub_targets = set()
         self.const_data = []
-        self.read_count = 0
+        self.uid_count = -1
+        self.has_read = False
         self.variables = set()
+        self.private_globals = []
+        self.external_symbols = set()
+        self.print_parameters = []
+
+    def uid(self):
+        self.uid_count += 1
+        return self.uid_count
 
 
 class Main(Function):
@@ -108,7 +115,6 @@ class LlvmIrGenerator:
         self.program = Program()
         self.state.functions.extend((self.program, Main()))
 
-
     def label(self, identifier):
         identifier = label_to_int(identifier)
         if identifier in self.state.defined_labels:
@@ -124,7 +130,8 @@ class LlvmIrGenerator:
 
     def read_item(self, variable):
         self.state.variables.add(variable)
-        i = self.state.read_count  # named register with index of current read
+        self.state.has_read = True
+        i = self.state.uid()
         self.program.append('%i{} = load i32, i32* @data_index, align 4'.format(i))
         self.program.append(lambda state:
             '%tmp{i} = getelementptr [{len} x double], [{len} x double]* @DATA, i32 0, i32 %i{i}'.format(len=len(state.const_data), i=i))
@@ -132,13 +139,59 @@ class LlvmIrGenerator:
         self.program.append('store double %data_value{}, double* @{}, align 8'.format(i, variable))
         self.program.append('%i{i}_inc = add i32 %i{i}, 1'.format(i=i))
         self.program.append('store i32 %i{}_inc, i32* @data_index, align 4'.format(i))
-        self.state.read_count += 1
 
     def data_item(self, value):
         try:
             self.state.const_data.append(float(value))
         except ValueError:
             raise SemanticError('{} is not a valid number'.format(value))
+
+    def print_newline(self, _):
+        self.state.external_symbols.add('putchar')
+        self.program.append('tail call i32 @putchar(i32 10)')
+
+    def const_string(self, literal):
+        # Create a constant null-terminated string, global to this module
+        string_constant_identifier = '@.str{}'.format(len(self.state.private_globals))
+        string_length = len(literal) + 1
+        self.state.private_globals.append('{} = private unnamed_addr constant [{} x i8] c"{}\\00", align 1'.format(string_constant_identifier, string_length, literal))
+        return string_constant_identifier, string_length
+
+    def print(self, element):
+        self.state.print_parameters.append(element)
+
+    def print_end(self, _, suffix=''):
+        self.state.external_symbols.add('printf')
+
+        format_parameters = []
+        va_args = []
+        for element in self.state.print_parameters:
+            if element.startswith('"'):
+                # Unescape double quotes
+                element = element[1:-1].replace('""', '\\"')
+                format_parameters.append('%s')
+                # Create a constant string
+                str_id, str_len = const_string(element)
+                va_args.append('i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {str_id}, i64 0, i64 0)'.format(len=str_len, str_id=str_id))
+            else:
+                self.state.variables.add(element)
+                format_parameters.append('%f')
+                load_tmp = '%{}{}'.format(element, self.state.uid())
+                self.program.append('{} = load double, double* @{}, align 8'.format(load_tmp, element))
+                va_args.append(load_tmp)
+
+        format_string = '{}{}\\0A'.format(' '.join(format_parameters), suffix)
+        format_string_id, length = const_string(format_string)
+        self.program.append(
+            'tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {identifier}, i64 0, i64 0), '
+            '{va_args})'.format(
+                len=length,
+                identifier=format_string_id,
+                va_args=', '.join(va_args),
+            ))
+
+    def print_end_with_newline(self):
+        print_end(None, suffix='\n')
 
     def goto(self, target):
         target = label_to_int(target)
@@ -160,8 +213,17 @@ class LlvmIrGenerator:
         self.program.append('; {}'.format(text))
 
     def end(self, event):
+        self.state.external_symbols.add('exit')
         self.program.append('musttail call void @exit(i32 0) noreturn nounwind')
         self.program.append('unreachable')
+
+    def external_symbols_declarations(self):
+        DECLARATIONS = {
+            'exit': 'declare void @exit(i32) local_unnamed_addr noreturn nounwind',
+            'printf': 'declare i32 @printf(i8* nocapture readonly, ...) local_unnamed_addr #0',
+            'putchar': 'declare i32 @putchar(i32) local_unnamed_addr #0',
+        }
+        return [DECLARATIONS[x] for x in sorted(self.state.external_symbols)]
 
     def to_ll(self):
         # defined_functions = {x.name for x in self.state.functions}
@@ -173,25 +235,25 @@ class LlvmIrGenerator:
         if undefined_labels:
             raise SemanticError('Undefined labels: {}'.format(undefined_labels))
 
-        if self.state.read_count and not self.state.const_data:
+        if self.state.has_read and not self.state.const_data:
             raise SemanticError('Code has READ statements, but no DATA statement')
-
-        header = [
-            'source_filename = "{}"\n'.format(self.state.filename),
-        ]
 
         if self.state.const_data:
             data_array = '[{}]'.format(', '.join('double {}'.format(float(x)) for x in self.state.const_data))
-            header.append(
-                '@data_index = dso_local local_unnamed_addr global i32 0, align 4\n'
-                '@DATA = dso_local local_unnamed_addr constant [{} x double] {}, align 8'.format(len(self.state.const_data), data_array)
-            )
+            self.state.private_globals.append('@data_index = internal global i32 0, align 4')
+            self.state.private_globals.append('@DATA = private unnamed_addr constant [{} x double] {}, align 8'.format(len(self.state.const_data), data_array))
 
-        header.extend([
-            '@{} = dso_local local_unnamed_addr global double 0., align 8'.format(x) for x in sorted(self.state.variables)])
+        header = [
+            'source_filename = "{}"\n'.format(self.state.filename),
+            *(x for x in sorted(self.state.private_globals)),
+            *('@{} = internal global double 0., align 8'.format(x) for x in sorted(self.state.variables)),
+        ]
+
+        body = [x.to_ll(self.state) for x in self.state.functions]
 
         return '\n'.join((
             *header,
-            '\n'.join(x.to_ll(self.state) for x in self.state.functions),
+            *body,
+            *self.external_symbols_declarations(),
             LLVM_TAIL,
         ))

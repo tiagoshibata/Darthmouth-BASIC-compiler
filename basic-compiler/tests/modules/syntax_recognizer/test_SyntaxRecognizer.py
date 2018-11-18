@@ -86,8 +86,8 @@ def test_data():
             syntax_recognizer.handle_event(('eof', None))
         s = f.getvalue()
     assert_source_matches(s,  '''source_filename = "source.bas"
-@data_index = dso_local local_unnamed_addr global i32 0, align 4
-@DATA = dso_local local_unnamed_addr constant [5 x double] [double 10.0, double -20.0, double 30.0, double 3.14, double -0.5], align 8
+@DATA = private unnamed_addr constant [5 x double] [double 10.0, double -20.0, double 30.0, double 3.14, double -0.5], align 8
+@data_index = internal global i32 0, align 4
 define dso_local void @program(i8* %target_label) local_unnamed_addr #0 {
   indirectbr i8* %target_label, [ label %label_100 ]
   label_100:
@@ -98,4 +98,5 @@ define dso_local i32 @main() local_unnamed_addr #1 {
   musttail call void @program(i8* blockaddress(@program, %label_100)) #0
   ret i32 0
 }
+declare void @exit(i32) local_unnamed_addr noreturn nounwind
 ''')

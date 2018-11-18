@@ -48,6 +48,7 @@ def create_event_engine():
     ('data.bas', ''),
     ('read.bas', ''),
     ('jump_to_data.bas', ''),
+    ('print.bas', '\ntest\ntest without a new line\n'),
 ])
 def test_compiler_end_to_end(source_filename, expected_output):
     event_engine = EventEngine([

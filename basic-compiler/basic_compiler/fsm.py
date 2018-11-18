@@ -9,10 +9,10 @@ class FsmError(RuntimeError):
 
 
 def find_transition(transition_list, event):
-    if isinstance(event[1], str):
-        event = (event[0], event[1].upper())  # make case insensitive comparisons
+    # Comparisons of the token value are case insensitive
+    case_insensitive_event = (event[0], event[1].upper()) if isinstance(event[1], str) else None
     transition = next((x for x in transition_list
-                       if not x.event or isinstance(x.event, Fsm) or x.event == event or isinstance(x.event, str) and x.event == event[0]), None)
+                       if not x.event or isinstance(x.event, Fsm) or x.event == case_insensitive_event or isinstance(x.event, str) and x.event == event[0]), None)
     if not transition:
         return None
     if transition.semantic_action:

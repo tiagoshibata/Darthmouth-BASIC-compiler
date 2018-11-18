@@ -189,6 +189,7 @@ class LlvmIrGenerator:
                 identifier=format_string_id,
                 va_args=', '.join(va_args),
             ))
+        self.state.print_parameters = []
 
     def print_end_with_newline(self, _):
         self.print_end(_, suffix='\\0A')

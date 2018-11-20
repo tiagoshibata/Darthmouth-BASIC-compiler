@@ -59,6 +59,7 @@ class SemanticState:
     def __init__(self, filename):
         self.filename = filename
         self.functions = []
+        self.referenced_functions = set()
         self.entry_point = None
         self.defined_labels = set()
         self.goto_targets = set()
@@ -69,6 +70,9 @@ class SemanticState:
         self.variables = set()
         self.private_globals = []
         self.external_symbols = set()
+        self.expression_sign_queue = []  # True = sign should be reversed (negative)
+        self.expression_function_queue = []
+        self.expression_result = None
         self.print_parameters = []
 
     def uid(self):
@@ -109,6 +113,13 @@ def label_to_int(identifier):
         raise SemanticError('Label is not valid: {}'.format(identifier))
 
 
+def number_to_double(number):
+    try:
+        return float(number)
+    except ValueError:
+        raise SemanticError('Double is not valid: {}'.format(identifier))
+
+
 class LlvmIrGenerator:
     def __init__(self, filename):
         self.state = SemanticState(os.path.basename(filename))
@@ -127,6 +138,71 @@ class LlvmIrGenerator:
         if not is_block_terminator(self.program.instructions[-1]):
             self.program.append(lambda state: ('br label %{}'.format(label) if identifier in state.goto_targets | state.gosub_targets else None))
         self.program.append(lambda state: ('{}:'.format(label) if identifier in state.goto_targets | state.gosub_targets | {state.entry_point} else None))
+
+    def start_expression(self, _):
+        self.state.expression_sign_queue.append(False)
+
+    def negative_expression(self, _):
+        self.state.expression_sign_queue[-1] = not self.state.expression_sign_queue[-1]
+
+    def number(self, number):
+        self.state.expression_result = number_to_double(number)
+        if self.state.expression_sign_queue[-1]:
+            self.state.expression_sign_queue[-1] = False
+            self.state.expression_result = -self.state.expression_result
+
+    def variable(self, variable):
+        self.state.variables.add(variable)
+        register = '{}{}'.format(variable, self.state.uid())
+        self.program.append('%{} = load double, double* @{}, align 8'.format(register, variable))
+
+    def function_call(self, identifier):
+        self.state.expression_function_queue.append(identifier.upper())
+
+    def start_nested_expression(self, _):
+        self.state.expression_function_queue.append(None)
+
+    def end_nested_expression(self, _):
+        # Check if expression was the argument of a function call
+        function = self.state.expression_function_queue.pop()
+        if function:
+            if function.startswith('FN'):
+                # Call user defined function
+                raise NotImplementedError()
+
+            built_in_to_implementation = {
+                'SIN': 'llvm.sin.f64',
+                'COS': 'llvm.cos.f64',
+                'TAN': 'tan',
+                'ATN': 'atan',
+                'EXP': 'llvm.exp.f64',
+                'ABS': 'llvm.fabs.f64',
+                'LOG': 'llvm.log.f64',
+                'SQR': 'llvm.sqrt.f64',
+                'INT': 'llvm.rint.f64',
+                'RND': 'rand',
+            }
+
+            implementation = built_in_to_implementation.get(function)
+            if not implementation:
+                raise SemanticError('Unknown function identifier: {}'.format())
+
+            self.state.referenced_functions.add(implementation)
+            register = '{}{}'.format(function, self.state.uid())
+            if function == 'RND':
+                # Call rand, cast to double and divide by RAND_MAX (platform-specific, 2147483647 on Linux)
+                self.program.append('%{}_int = call i32 @rand() #0'.format(register))
+                self.program.append('%{r}_double = sitofp i32 %{r}_int to double'.format(r=register))
+                self.program.append('%{r} = fdiv double %{r}_double, 2147483647.'.format(r=register))
+            else:
+                self.program.append('%{} = call fast double @{}(double %{}) #0'.format(register, implementation, self.state.expression_result))
+            self.state.expression_result = register
+
+    def end_expression(self, _):
+        if self.state.expression_sign_queue.pop():
+            register = '{}{}'.format(variable, self.state.uid())
+            self.program.append('%{} = fneg fast double %'.format(register, self.state.expression_result))
+            self.state.expression_result = register
 
     def read_item(self, variable):
         self.state.variables.add(variable)
@@ -220,15 +296,27 @@ class LlvmIrGenerator:
 
     def external_symbols_declarations(self):
         DECLARATIONS = {
-            'exit': 'declare void @exit(i32) local_unnamed_addr noreturn nounwind',
+            'exit': 'declare void @exit(i32) local_unnamed_addr noreturn #0',
             'printf': 'declare i32 @printf(i8* nocapture readonly, ...) local_unnamed_addr #0',
             'putchar': 'declare i32 @putchar(i32) local_unnamed_addr #0',
+
+            # Language built-ins
+            'llvm.sin.f64': 'declare double @llvm.sin.f64(double) local_unnamed_addr #0',
+            'llvm.cos.f64': 'declare double @llvm.cos.f64(double) local_unnamed_addr #0',
+            'tan': 'declare double @tan(double) local_unnamed_addr #0',
+            'atan': 'declare double @atan(double) local_unnamed_addr #0',
+            'llvm.exp.f64': 'declare double @llvm.exp.f64(double) local_unnamed_addr #0',
+            'llvm.abs.f64': 'declare double @llvm.abs.f64(double) local_unnamed_addr #0',
+            'llvm.log.f64': 'declare double @llvm.log.f64(double) local_unnamed_addr #0',
+            'llvm.sqrt.f64': 'declare double @llvm.sqrt.f64(double) local_unnamed_addr #0',
+            'llvm.rint.f64': 'declare double @llvm.rint.f64(double) local_unnamed_addr #0',
+            'rand': 'declare i32 rand() local_unnamed_addr #0',
         }
         return [DECLARATIONS[x] for x in sorted(self.state.external_symbols)]
 
     def to_ll(self):
         # defined_functions = {x.name for x in self.state.functions}
-        # undefined_functions = self.state.referenced_functions - defined_functions
+        # undefined_functions = self.state.referenced_functions - defined_functions  # TODO remove symbols in external_symbols_declarations
         # if undefined_functions:
         #     raise SemanticError('Undefined functions: {}'.format(undefined_functions))
 

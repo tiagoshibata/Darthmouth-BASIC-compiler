@@ -122,5 +122,5 @@ define dso_local i32 @main() local_unnamed_addr #1 {
   musttail call void @program(i8* blockaddress(@program, %label_100)) #0
   ret i32 0
 }
-declare void @exit(i32) local_unnamed_addr noreturn nounwind
+declare void @exit(i32) local_unnamed_addr noreturn #0
 ''')

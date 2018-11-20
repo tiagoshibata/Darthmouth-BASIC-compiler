@@ -6,9 +6,39 @@ from basic_compiler.modules.semantic.llvm import LlvmIrGenerator
 class SyntaxRecognizer(EventDrivenModule):
     def open_handler(self, event):
         self.ir_generator = LlvmIrGenerator(event[0])
-        exp_fsm = Fsm({
+        exp_fsm = Fsm({})
+        exp_fsm.states = {
+            'start': State(None, [
+                Transition(('special', '+'), 'start'),
+                Transition(('special', '-'), 'start', self.ir_generator.negative_expression),
+                Transition(None, 'start_expression'),
+            ]),
+            'start_expression': State(None, [
+                Transition(('special', '('), 'nested_expression', self.ir_generator.start_nested_expression),
+                Transition('number', 'end_expression', self.ir_generator.number),
+                Transition('variable', 'end_expression', self.ir_generator.variable),
+                Transition('identifier', 'function_call', self.ir_generator.function_call),
+            ]),
+            'nested_expression': State(None, [
+                Transition(exp_fsm, 'end_of_nested_expression'),  # TODO
+            ]),
+            'end_of_nested_expression': State(None, [
+                Transition(('special', ')'), 'end_expression', self.ir_generator.end_nested_expression),
+            ]),
+            'function_call': State(None, [
+                Transition(('special', '('), 'nested_expression'),
+            ]),
+            'end_expression': State(None, [
+                Transition(('special', '+'), 'start_expression'),
+                Transition(('special', '-'), 'start_expression'),
+                Transition(('special', '*'), 'start_expression'),
+                Transition(('special', '/'), 'start_expression'),
+                Transition(('special', '↑'), 'start_expression'),
+                Transition(None, 'accept', self.ir_generator.end_expression),
+            ]),
+            'accept': State(True)
+        }
 
-        })
         self.fsm = Fsm({
             'start': State(None, [
                 Transition('number', 'statement', self.ir_generator.label),
@@ -62,16 +92,16 @@ class SyntaxRecognizer(EventDrivenModule):
             'print': State(None, [
                 Transition('end_of_line', 'start', self.ir_generator.print_newline),
                 Transition('string', 'print_string', self.ir_generator.print),
-                Transition(exp_fsm, 'print_after_exp'),  # TODO
+                Transition(exp_fsm, 'print_after_exp', self.ir_generator.start_expression),  # TODO
             ]),
             'print_string': State(None, [
                 Transition(('special', ','), 'print_after_comma'),
                 Transition('end_of_line', 'start', self.ir_generator.print_end_with_newline),
-                Transition(exp_fsm, 'print_after_exp'),  # TODO
+                Transition(exp_fsm, 'print_after_exp', self.ir_generator.start_expression),  # TODO
             ]),
             'print_after_comma': State(None, [
                 Transition('end_of_line', 'start', self.ir_generator.print_end),
-                Transition(exp_fsm, 'print_after_exp'),  # TODO
+                Transition(exp_fsm, 'print_after_exp', self.ir_generator.start_expression),  # TODO
             ]),
             'print_after_exp': State(None, [
                 Transition(('special', ','), 'print_after_comma'),

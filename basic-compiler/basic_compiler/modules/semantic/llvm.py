@@ -150,20 +150,22 @@ class LlvmIrGenerator:
             self.program.append(lambda state: ('br label %{}'.format(label) if identifier in state.goto_targets | state.gosub_targets else None))
         self.program.append(lambda state: ('{}:'.format(label) if identifier in state.goto_targets | state.gosub_targets | {state.entry_point} else None))
 
-    def start_expression(self, _):
-        self.state.expression_sign_queue.append(False)
-
     def negative_expression(self, _):
         if self.state.expression_operator_queue[-1] == 'n':
             self.state.expression_operator_queue.pop()
         else:
             self.state.expression_operator_queue.append('n')
 
+    def is_unary_negative(self):
+        if self.state.expression_operator_queue and self.state.expression_operator_queue[-1] == 'n':
+            self.state.expression_operator_queue.pop()
+            return True
+        return False
+
     def number(self, number):
         number = number_to_double(number)
         # Negate the result if a unary negative precedes it
-        if self.state.expression_operator_queue[-1] == 'n':
-            self.state.expression_operator_queue.pop()
+        if self.is_unary_negative():
             number = -number
         self.state.expression_operand_queue.append(number)
 
@@ -177,8 +179,7 @@ class LlvmIrGenerator:
         register = '{}{}'.format(variable, self.state.uid())
         self.program.append('%{} = load double, double* @{}, align 8'.format(register, variable))
         # Negate the result if a unary negative precedes it
-        if self.state.expression_operator_queue[-1] == 'n':
-            self.state.expression_operator_queue.pop()
+        if self.is_unary_negative():
             self.state.expression_operand_queue.append(negate(register))
         else:
             self.state.expression_operand_queue.append(register)
@@ -219,8 +220,7 @@ class LlvmIrGenerator:
             function = self.state.expression_operator_queue.pop()
             register = self.call_function(function)
         # Negate the result if a unary negative precedes it
-        if self.state.expression_operator_queue[-1] == 'n':
-            self.state.expression_operator_queue.pop()
+        if self.is_unary_negative():
             self.state.expression_operand_queue.append(negate(register))
 
     def call_function(self, function):

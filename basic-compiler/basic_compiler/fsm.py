@@ -31,7 +31,7 @@ class Fsm:
         self.current_token = []
 
     def copy(self):
-        return Fsm(this.states)
+        return Fsm(self.states)
 
     def transition(self, event):
         if self.sub_fsm:
@@ -57,5 +57,7 @@ class Fsm:
         elif isinstance(transition[0], Fsm):
             # Call a sub-FSM
             self.sub_fsm = transition[0].copy()
+            self.current_state_name = transition[1]
+            return self.transition(event)
         self.current_token.append(event[1])
         self.current_state_name = transition[1]

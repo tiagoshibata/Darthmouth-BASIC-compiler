@@ -92,18 +92,18 @@ class SyntaxRecognizer(EventDrivenModule):
             'print': State(None, [
                 Transition('end_of_line', 'start', self.ir_generator.print_newline),
                 Transition('string', 'print_string', self.ir_generator.print),
-                Transition(exp_fsm, 'print_after_exp', self.ir_generator.start_expression),  # TODO
+                Transition(exp_fsm, 'print_after_exp'),
             ]),
             'print_string': State(None, [
                 Transition(('special', ','), 'print_after_comma'),
                 Transition('end_of_line', 'start', self.ir_generator.print_end_with_newline),
-                Transition(exp_fsm, 'print_after_exp', self.ir_generator.start_expression),  # TODO
+                Transition(exp_fsm, 'print_after_exp'),
             ]),
             'print_after_comma': State(None, [
                 Transition('end_of_line', 'start', self.ir_generator.print_end),
-                Transition(exp_fsm, 'print_after_exp', self.ir_generator.start_expression),  # TODO
+                Transition(exp_fsm, 'print_after_exp'),
             ]),
-            'print_after_exp': State(None, [
+            'print_after_exp': State(None, [  # TODO Actually print the expression result
                 Transition(('special', ','), 'print_after_comma'),
                 Transition('end_of_line', 'start', self.ir_generator.print_end_with_newline),
             ]),

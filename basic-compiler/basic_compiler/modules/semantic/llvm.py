@@ -70,9 +70,8 @@ class SemanticState:
         self.variables = set()
         self.private_globals = []
         self.external_symbols = set()
-        self.expression_sign_queue = []  # True = sign should be reversed (negative)
-        self.expression_function_queue = []
-        self.expression_result = None
+        self.expression_operator_queue = []
+        self.expression_operand_queue = []
         self.print_parameters = []
 
     def uid(self):
@@ -120,6 +119,18 @@ def number_to_double(number):
         raise SemanticError('Double is not valid: {}'.format(identifier))
 
 
+def operator_priority(operator):
+    # Functions have lowest priority ("(" must be evaluated first)
+    if len(operator) == 3:
+        return 0
+    # 'n' represents the negative sign leading an expression (unary -)
+    PRIORITY = [('n',), ('+', '-'), ('*', '/'), ('↑',), ('(',)]
+    priority = next((i for i, x in enumerate(PRIORITY) if operator in x), None)
+    if not priority:
+        raise SemanticError('Operator not implemented: {}'.format(operator))
+    return priority
+
+
 class LlvmIrGenerator:
     def __init__(self, filename):
         self.state = SemanticState(os.path.basename(filename))
@@ -143,66 +154,84 @@ class LlvmIrGenerator:
         self.state.expression_sign_queue.append(False)
 
     def negative_expression(self, _):
-        self.state.expression_sign_queue[-1] = not self.state.expression_sign_queue[-1]
+        if self.state.expression_operator_queue[-1] == 'n':
+            self.state.expression_operator_queue.pop()
+        else:
+            self.state.expression_operator_queue.append('n')
 
     def number(self, number):
-        self.state.expression_result = number_to_double(number)
-        if self.state.expression_sign_queue[-1]:
-            self.state.expression_sign_queue[-1] = False
-            self.state.expression_result = -self.state.expression_result
+        number = number_to_double(number)
+        if self.state.expression_operator_queue[-1] == 'n':
+            # Negate the result if a unary negative precedes the number
+            self.state.expression_operator_queue.pop()
+            number = -number
+        self.state.expression_operand_queue.append(number)
 
     def variable(self, variable):
         self.state.variables.add(variable)
         register = '{}{}'.format(variable, self.state.uid())
         self.program.append('%{} = load double, double* @{}, align 8'.format(register, variable))
-
-    def function_call(self, identifier):
-        self.state.expression_function_queue.append(identifier.upper())
-
-    def start_nested_expression(self, _):
-        self.state.expression_function_queue.append(None)
+        if self.state.expression_operator_queue[-1] == 'n':
+            # Negate the result if a unary negative precedes the variable
+            self.state.expression_operator_queue.pop()
+            self.program.append('%{r}_neg = fneg fast double %{r}'.format(r=register))
+            self.state.expression_operand_queue.append('{}_neg'.format(register))
+        else:
+            self.state.expression_operand_queue.append(register)
 
     def end_nested_expression(self, _):
+        # Pop operators until '(' is found
+        raise NotImplementedError()
         # Check if expression was the argument of a function call
-        function = self.state.expression_function_queue.pop()
-        if function:
-            if function.startswith('FN'):
-                # Call user defined function
-                raise NotImplementedError()
+        if self.expression_operator_queue and len(self.expression_operator_queue[-1]) > 1:
+            self.call_function(self.state.expression_function_queue.pop())
 
-            built_in_to_implementation = {
-                'SIN': 'llvm.sin.f64',
-                'COS': 'llvm.cos.f64',
-                'TAN': 'tan',
-                'ATN': 'atan',
-                'EXP': 'llvm.exp.f64',
-                'ABS': 'llvm.fabs.f64',
-                'LOG': 'llvm.log.f64',
-                'SQR': 'llvm.sqrt.f64',
-                'INT': 'llvm.rint.f64',
-                'RND': 'rand',
-            }
+    def call_function(self, function):
+        if function.startswith('FN'):
+            # Call user defined function
+            raise NotImplementedError()
 
-            implementation = built_in_to_implementation.get(function)
-            if not implementation:
-                raise SemanticError('Unknown function identifier: {}'.format())
+        built_in_to_implementation = {
+            'SIN': 'llvm.sin.f64',
+            'COS': 'llvm.cos.f64',
+            'TAN': 'tan',
+            'ATN': 'atan',
+            'EXP': 'llvm.exp.f64',
+            'ABS': 'llvm.fabs.f64',
+            'LOG': 'llvm.log.f64',
+            'SQR': 'llvm.sqrt.f64',
+            'INT': 'llvm.rint.f64',
+            'RND': 'rand',
+        }
 
-            self.state.referenced_functions.add(implementation)
-            register = '{}{}'.format(function, self.state.uid())
-            if function == 'RND':
-                # Call rand, cast to double and divide by RAND_MAX (platform-specific, 2147483647 on Linux)
-                self.program.append('%{}_int = call i32 @rand() #0'.format(register))
-                self.program.append('%{r}_double = sitofp i32 %{r}_int to double'.format(r=register))
-                self.program.append('%{r} = fdiv double %{r}_double, 2147483647.'.format(r=register))
-            else:
-                self.program.append('%{} = call fast double @{}(double %{}) #0'.format(register, implementation, self.state.expression_result))
-            self.state.expression_result = register
+        implementation = built_in_to_implementation.get(function)
+        if not implementation:
+            raise SemanticError('Unknown function identifier: {}'.format())
+
+        self.state.referenced_functions.add(implementation)
+        register = '{}{}'.format(function, self.state.uid())
+        operand = self.expression_operand_queue.pop()
+        if function == 'RND':
+            # Call rand, cast to double and divide by RAND_MAX (platform-specific, 2147483647 on Linux)
+            self.program.append('%{}_int = call i32 @rand() #0'.format(register))
+            self.program.append('%{r}_double = sitofp i32 %{r}_int to double'.format(r=register))
+            self.program.append('%{r} = fdiv double %{r}_double, 2147483647.'.format(r=register))
+        else:
+            self.program.append('%{} = call fast double @{}(double %{}) #0'.format(register, implementation, operand))
+        self.state.expression_result = register
+
+    def operator(self, operator):
+        current_priority = operator_priority(operator)
+        queue_top_priority = operator_priority(self.state.expression_operator_queue[-1])
+        if current_priority < queue_top_priority:
+            # Can't stack, evaluate previous expression first
+            raise NotImplementedError()
+        else:
+            self.state.expression_operator_queue.push(operator)
 
     def end_expression(self, _):
-        if self.state.expression_sign_queue.pop():
-            register = '{}{}'.format(variable, self.state.uid())
-            self.program.append('%{} = fneg fast double %'.format(register, self.state.expression_result))
-            self.state.expression_result = register
+        # Pop all queued operations
+        raise NotImplementedError()
 
     def read_item(self, variable):
         self.state.variables.add(variable)

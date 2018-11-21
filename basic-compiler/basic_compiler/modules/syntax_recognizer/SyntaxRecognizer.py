@@ -14,10 +14,10 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition(None, 'start_expression'),
             ]),
             'start_expression': State(None, [
-                Transition(('special', '('), 'nested_expression', self.ir_generator.start_nested_expression),
+                Transition(('special', '('), 'nested_expression', self.ir_generator.operator),
                 Transition('number', 'end_expression', self.ir_generator.number),
                 Transition('variable', 'end_expression', self.ir_generator.variable),
-                Transition('identifier', 'function_call', self.ir_generator.function_call),
+                Transition('identifier', 'function_call', self.ir_generator.operator),
             ]),
             'nested_expression': State(None, [
                 Transition(exp_fsm, 'end_of_nested_expression'),  # TODO
@@ -26,14 +26,14 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition(('special', ')'), 'end_expression', self.ir_generator.end_nested_expression),
             ]),
             'function_call': State(None, [
-                Transition(('special', '('), 'nested_expression'),
+                Transition(('special', '('), 'nested_expression', self.ir_generator.operator),
             ]),
             'end_expression': State(None, [
-                Transition(('special', '+'), 'start_expression'),
-                Transition(('special', '-'), 'start_expression'),
-                Transition(('special', '*'), 'start_expression'),
-                Transition(('special', '/'), 'start_expression'),
-                Transition(('special', '↑'), 'start_expression'),
+                Transition(('special', '+'), 'start_expression', self.ir_generator.operator),
+                Transition(('special', '-'), 'start_expression', self.ir_generator.operator),
+                Transition(('special', '*'), 'start_expression', self.ir_generator.operator),
+                Transition(('special', '/'), 'start_expression', self.ir_generator.operator),
+                Transition(('special', '↑'), 'start_expression', self.ir_generator.operator),
                 Transition(None, 'accept', self.ir_generator.end_expression),
             ]),
             'accept': State(True)

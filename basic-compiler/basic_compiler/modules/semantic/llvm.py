@@ -116,17 +116,17 @@ def number_to_double(number):
     try:
         return float(number)
     except ValueError:
-        raise SemanticError('Double is not valid: {}'.format(identifier))
+        raise SemanticError('Double is not valid: {}'.format(number))
 
 
 def operator_priority(operator):
-    # Functions have lowest priority ("(" must be evaluated first)
+    # Functions have lower priority than "(", but higher than "n"
     if len(operator) == 3:
-        return 0
+        return 1
     # 'n' represents the negative sign leading an expression (unary -)
     PRIORITY = [('n',), ('+', '-'), ('*', '/'), ('↑',), ('(',)]
     priority = next((i for i, x in enumerate(PRIORITY) if operator in x), None)
-    if not priority:
+    if priority is None:
         raise SemanticError('Operator not implemented: {}'.format(operator))
     return priority
 
@@ -151,9 +151,7 @@ class LlvmIrGenerator:
         self.program.append(lambda state: ('{}:'.format(label) if identifier in state.goto_targets | state.gosub_targets | {state.entry_point} else None))
 
     def negative_expression(self, _):
-        if self.state.expression_operator_queue[-1] == 'n':
-            self.state.expression_operator_queue.pop()
-        else:
+        if not self.is_unary_negative():
             self.state.expression_operator_queue.append('n')
 
     def is_unary_negative(self):
@@ -169,7 +167,7 @@ class LlvmIrGenerator:
             number = -number
         self.state.expression_operand_queue.append(number)
 
-    def negate(register):
+    def negate(self, register):
         negated = '{}_neg'.format(register)
         self.program.append('%{} = fneg fast double %{}'.format(negated, register))
         return negated
@@ -188,9 +186,9 @@ class LlvmIrGenerator:
         operator = self.state.expression_operator_queue.pop()
         a, b = self.state.expression_operand_queue.pop(), self.state.expression_operand_queue.pop()
         if operator == '↑':
-            self.state.referenced_functions.add('llvm.pow.f64')
+            self.state.external_symbols.add('llvm.pow.f64')
             register = 'pow_{}'.format(self.state.uid())
-            self.program.append('%{} = call fast double @llvm.pow.f64(double {}, double {}) #0'.format(register, a, b))
+            self.program.append('%{} = tail call fast double @llvm.pow.f64(double {}, double {}) #0'.format(register, a, b))
         else:
             operator_to_instruction = {
                 '+': 'fadd',
@@ -204,20 +202,21 @@ class LlvmIrGenerator:
         self.state.expression_operand_queue.append(register)
 
     def evaluate_scope(self):
-        # Evaluate until start of scope ("(")
-        while self.state.expression_operator_queue and self.state.expression_operator_queue[-1] != '(':
+        # Evaluate until start of scope ("(" or start of expression)
+        while self.state.expression_operator_queue:
+            if self.state.expression_operator_queue[-1] == '(':
+                self.state.expression_operator_queue.pop()
+                return
             self.evaluate_expression()
 
     def end_nested_expression(self, _):
-        # Pop operators until '(' is found
-        self.evaluate_scope()
         # Check if expression was the argument of a function call
         if self.state.expression_operator_queue and len(self.state.expression_operator_queue[-1]) > 1:
             function = self.state.expression_operator_queue.pop()
-            register = self.call_function(function)
+            self.call_function(function)
         # Negate the result if a unary negative precedes it
         if self.is_unary_negative():
-            self.state.expression_operand_queue.append(self.negate(register))
+            self.state.expression_operand_queue[-1] = self.negate(self.state.expression_operand_queue[-1])
 
     def call_function(self, function):
         if function.startswith('FN'):
@@ -241,16 +240,16 @@ class LlvmIrGenerator:
         if not implementation:
             raise SemanticError('Unknown function identifier: {}'.format())
 
-        self.state.referenced_functions.add(implementation)
+        self.state.external_symbols.add(implementation)
         register = '{}{}'.format(function, self.state.uid())
-        operand = self.expression_operand_queue.pop()
+        operand = self.state.expression_operand_queue.pop()
         if function == 'RND':
             # Call rand, cast to double and divide by RAND_MAX (platform-specific, 2147483647 on Linux)
             self.program.append('%{}_int = call i32 @rand() #0'.format(register))
             self.program.append('%{r}_double = sitofp i32 %{r}_int to double'.format(r=register))
             self.program.append('%{r} = fdiv double %{r}_double, 2147483647.'.format(r=register))
         else:
-            self.program.append('%{} = call fast double @{}(double %{}) #0'.format(register, implementation, operand))
+            self.program.append('%{} = tail call fast double @{}(double {}) #0'.format(register, implementation, operand))
         self.state.expression_operand_queue.append(register)
 
     def operator(self, operator):
@@ -260,12 +259,13 @@ class LlvmIrGenerator:
             queue_top_priority = operator_priority(self.state.expression_operator_queue[-1])
             if current_priority <= queue_top_priority:
                 # Can't stack, evaluate previous expression first
+                raise NotImplementedError()  # TODO test this path
                 self.evaluate_scope()
                 return
-        self.state.expression_operator_queue.append(operator)
+        self.state.expression_operator_queue.append(operator.upper())
 
     def end_expression(self, _):
-        # Pop all queued operations
+        # Pop queued operators until '(' or start of expression is found
         self.evaluate_scope()
 
     def read_item(self, variable):
@@ -412,7 +412,7 @@ class LlvmIrGenerator:
             self.state.private_globals.append('@DATA = private unnamed_addr constant [{} x double] {}, align 8'.format(len(self.state.const_data), data_array))
 
         header = [
-            'source_filename = "{}"\n'.format(self.state.filename),
+            'source_filename = "{}"'.format(self.state.filename),
             *(x for x in sorted(self.state.private_globals)),
             *('@{} = internal global double 0., align 8'.format(x) for x in sorted(self.state.variables)),
         ]

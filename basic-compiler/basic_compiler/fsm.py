@@ -37,11 +37,11 @@ class Fsm:
     def transition(self, event):
         if self.sub_fsm:
             result = self.sub_fsm.transition(event)
-            if result:
-                # Sub FSM returned, go back to normal execution
-                self.sub_fsm = None
-                self.transition(event)
-            return result
+            if not result:
+                return
+            # Sub FSM succeeded, go back to normal execution
+            self.sub_fsm = None
+            return self.transition(event)
         current_state = self.states[self.current_state_name]
         next_transition = find_transition(current_state.transitions, event)
         identified_token = None

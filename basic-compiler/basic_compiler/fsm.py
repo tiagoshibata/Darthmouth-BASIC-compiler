@@ -35,13 +35,14 @@ class Fsm:
 
     def transition(self, event):
         if self.sub_fsm:
-            if self.sub_fsm.transition(event):
-                # Sub FSM returned, go back to normal execution
-                self.sub_fsm = None
+            if not self.sub_fsm.transition(event):
+                return
+            # Sub FSM returned, go back to normal execution
+            self.sub_fsm = None
         current_state = self.states[self.current_state_name]
-        transition = find_transition(current_state.transitions, event)
+        next_transition = find_transition(current_state.transitions, event)
         identified_token = None
-        if transition is None:
+        if next_transition is None:
             # Longest path found
             if not current_state.token_type:
                 raise FsmError('No valid transition for {}'.format(event))
@@ -50,14 +51,13 @@ class Fsm:
             self.reset()
             self.transition(event)
             return identified_token
-        elif not transition[0]:
+        elif not next_transition[0]:
             # Empty transition, don't consume the token yet
-            self.current_state_name = transition[1]
+            self.current_state_name = next_transition[1]
             return self.transition(event)
-        elif isinstance(transition[0], Fsm):
+        elif isinstance(next_transition[0], Fsm):
             # Call a sub-FSM
-            self.sub_fsm = transition[0].copy()
-            self.current_state_name = transition[1]
+            self.sub_fsm = next_transition[0].copy()
             return self.transition(event)
         self.current_token.append(event[1])
-        self.current_state_name = transition[1]
+        self.current_state_name = next_transition[1]

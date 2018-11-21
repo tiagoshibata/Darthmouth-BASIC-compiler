@@ -55,14 +55,13 @@ class Fsm:
                 self.reset()
                 self.transition(event)
             return identified_token
-        elif not next_transition[0]:
+        self.current_state_name = next_transition[1]
+        if not next_transition[0]:
             # Empty transition, don't consume the token yet
-            self.current_state_name = next_transition[1]
             return self.transition(event)
-        elif isinstance(next_transition[0], Fsm):
+        if isinstance(next_transition[0], Fsm):
             # Call a sub-FSM
             self.sub_fsm = next_transition[0].copy()
             self.sub_fsm.root_fsm = False
             return self.transition(event)
         self.current_token.append(event[1])
-        self.current_state_name = next_transition[1]

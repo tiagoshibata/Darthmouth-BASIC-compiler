@@ -49,7 +49,7 @@ def create_event_engine():
     ('read.bas', ''),
     ('jump_to_data.bas', ''),
     ('print.bas', '\ntest\ntest without a new line\n'),
-    ('print_expression.bas', '1\n'),
+    ('print_expression.bas', '1.000000\n'),
 ])
 def test_compiler_end_to_end(source_filename, expected_output):
     event_engine = EventEngine([

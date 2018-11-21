@@ -312,24 +312,25 @@ class LlvmIrGenerator:
         format_parameters = []
         va_args = []
         for element in self.state.print_parameters:
-            if element.startswith('"'):
-                # Unescape double quotes
+            if isinstance(element, float) or element.startswith('%'):
+                # Print number literal or local register
+                format_parameters.append('%f')
+                va_args.append('double {}'.format(element))
+            elif element.startswith('"'):
+                # Print string literal
+                # Unescape and encode double quotes, encode "\"
                 element = element[1:-1].replace('""', '\\22').replace('\\', '\\5C')
                 format_parameters.append('%s')
                 # Create a constant string
                 str_id, str_len = self.const_string(element)
                 va_args.append('i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {str_id}, i64 0, i64 0)'.format(len=str_len, str_id=str_id))
-            elif element.startswith('%'):
-                # Print local register
-                format_parameters.append('%f')
-                va_args.append(element)
             else:
                 # Load global variable
                 self.state.variables.add(element)
                 format_parameters.append('%f')
                 load_tmp = '%{}{}'.format(element, self.state.uid())
                 self.program.append('{} = load double, double* @{}, align 8'.format(load_tmp, element))
-                va_args.append(load_tmp)
+                va_args.append('double {}'.format(load_tmp))
 
         format_string_id, length = self.const_string(' '.join(format_parameters) + suffix)
         self.program.append(

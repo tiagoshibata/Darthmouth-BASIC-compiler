@@ -267,7 +267,7 @@ class LlvmIrGenerator:
 
     def end_expression(self, _):
         # Pop all queued operations
-        raise NotImplementedError()
+        self.evaluate_scope()
 
     def read_item(self, variable):
         self.state.variables.add(variable)
@@ -302,6 +302,10 @@ class LlvmIrGenerator:
     def print(self, element):
         self.state.print_parameters.append(element)
 
+    def print_expression_result(self, _):
+        self.state.print_parameters.append(self.state.expression_operand_queue.pop())
+        assert not self.state.expression_operand_queue  # queue should be empty after evaluation
+
     def print_end(self, _, suffix=''):
         self.state.external_symbols.add('printf')
 
@@ -315,7 +319,12 @@ class LlvmIrGenerator:
                 # Create a constant string
                 str_id, str_len = self.const_string(element)
                 va_args.append('i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {str_id}, i64 0, i64 0)'.format(len=str_len, str_id=str_id))
+            elif element.startswith('%'):
+                # Print local register
+                format_parameters.append('%f')
+                va_args.append(element)
             else:
+                # Load global variable
                 self.state.variables.add(element)
                 format_parameters.append('%f')
                 load_tmp = '%{}{}'.format(element, self.state.uid())

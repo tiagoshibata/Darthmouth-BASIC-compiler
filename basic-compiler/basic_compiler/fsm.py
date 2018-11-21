@@ -24,6 +24,7 @@ class Fsm:
     def __init__(self, states):
         self.states = states
         self.sub_fsm = None
+        self.root_fsm = True
         self.reset()
 
     def reset(self):
@@ -35,10 +36,12 @@ class Fsm:
 
     def transition(self, event):
         if self.sub_fsm:
-            if not self.sub_fsm.transition(event):
-                return
-            # Sub FSM returned, go back to normal execution
-            self.sub_fsm = None
+            result = self.sub_fsm.transition(event)
+            if result:
+                # Sub FSM returned, go back to normal execution
+                self.sub_fsm = None
+                self.transition(event)
+            return result
         current_state = self.states[self.current_state_name]
         next_transition = find_transition(current_state.transitions, event)
         identified_token = None
@@ -48,8 +51,9 @@ class Fsm:
                 raise FsmError('No valid transition for {}'.format(event))
             # Return token class and value
             identified_token = (current_state.token_type, ''.join(self.current_token))
-            self.reset()
-            self.transition(event)
+            if self.root_fsm:
+                self.reset()
+                self.transition(event)
             return identified_token
         elif not next_transition[0]:
             # Empty transition, don't consume the token yet
@@ -58,6 +62,7 @@ class Fsm:
         elif isinstance(next_transition[0], Fsm):
             # Call a sub-FSM
             self.sub_fsm = next_transition[0].copy()
+            self.sub_fsm.root_fsm = False
             return self.transition(event)
         self.current_token.append(event[1])
         self.current_state_name = next_transition[1]

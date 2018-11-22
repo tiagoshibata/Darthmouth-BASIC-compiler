@@ -169,7 +169,7 @@ class LlvmIrGenerator:
 
     def negate(self, register):
         negated = '{}_neg'.format(register)
-        self.program.append('%{} = fneg fast double %{}'.format(negated, register))
+        self.program.append('%{} = fsub fast double 0., %{}'.format(negated, register))
         return negated
 
     def variable(self, variable):

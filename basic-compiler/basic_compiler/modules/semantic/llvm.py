@@ -122,9 +122,9 @@ def number_to_double(number):
 def operator_priority(operator):
     # Functions have lower priority than "(", but higher than "n"
     if len(operator) == 3:
-        return 1
+        return 4
     # 'n' represents the negative sign leading an expression (unary -)
-    PRIORITY = [('n',), ('+', '-'), ('*', '/'), ('↑',), ('(',)]
+    PRIORITY = [('+', '-'), ('*', '/'), ('↑',), ('n',), ('function',), ('(',)]
     priority = next((i for i, x in enumerate(PRIORITY) if operator in x), None)
     if priority is None:
         raise SemanticError('Operator not implemented: {}'.format(operator))
@@ -176,19 +176,14 @@ class LlvmIrGenerator:
         self.state.variables.add(variable)
         register = '%{}{}'.format(variable, self.state.uid())
         self.program.append('{} = load double, double* @{}, align 8'.format(register, variable))
-        # Negate the result if a unary negative precedes it
-        if self.is_unary_negative():
-            self.state.expression_operand_queue.append(self.negate(register))
-        else:
-            self.state.expression_operand_queue.append(register)
+        self.state.expression_operand_queue.append(register)
 
     def evaluate_expression(self):
-        operator = self.state.expression_operator_queue.pop()
-        operand = self.state.expression_operand_queue.pop()
-        if operator == 'n':
-            register = self.negate(operand)
+        if self.is_unary_negative():
+            register = self.negate(self.state.expression_operand_queue.pop())
         else:
-            operand_2 = self.state.expression_operand_queue.pop()
+            operator = self.state.expression_operator_queue.pop()
+            operand, operand_2 = self.state.expression_operand_queue.pop(), self.state.expression_operand_queue.pop()
             if operator == '↑':
                 self.state.external_symbols.add('llvm.pow.f64')
                 register = '%pow_{}'.format(self.state.uid())
@@ -218,9 +213,6 @@ class LlvmIrGenerator:
         if self.state.expression_operator_queue and len(self.state.expression_operator_queue[-1]) > 1:
             function = self.state.expression_operator_queue.pop()
             self.call_function(function)
-        # Negate the result if a unary negative precedes it
-        if self.is_unary_negative():
-            self.state.expression_operand_queue[-1] = self.negate(self.state.expression_operand_queue[-1])
 
     def call_function(self, function):
         if function.startswith('FN'):
@@ -242,7 +234,7 @@ class LlvmIrGenerator:
 
         implementation = built_in_to_implementation.get(function)
         if not implementation:
-            raise SemanticError('Unknown function identifier: {}'.format())
+            raise SemanticError('Unknown function identifier: {}'.format(function))
 
         self.state.external_symbols.add(implementation)
         register = '%{}{}'.format(function, self.state.uid())

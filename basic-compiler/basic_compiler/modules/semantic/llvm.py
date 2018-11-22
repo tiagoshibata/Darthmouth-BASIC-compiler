@@ -169,13 +169,13 @@ class LlvmIrGenerator:
 
     def negate(self, register):
         negated = '{}_neg'.format(register)
-        self.program.append('%{} = fsub fast double 0., %{}'.format(negated, register))
+        self.program.append('{} = fsub fast double 0., {}'.format(negated, register))
         return negated
 
     def variable(self, variable):
         self.state.variables.add(variable)
-        register = '{}{}'.format(variable, self.state.uid())
-        self.program.append('%{} = load double, double* @{}, align 8'.format(register, variable))
+        register = '%{}{}'.format(variable, self.state.uid())
+        self.program.append('{} = load double, double* @{}, align 8'.format(register, variable))
         # Negate the result if a unary negative precedes it
         if self.is_unary_negative():
             self.state.expression_operand_queue.append(self.negate(register))
@@ -184,21 +184,25 @@ class LlvmIrGenerator:
 
     def evaluate_expression(self):
         operator = self.state.expression_operator_queue.pop()
-        a, b = self.state.expression_operand_queue.pop(), self.state.expression_operand_queue.pop()
-        if operator == '↑':
-            self.state.external_symbols.add('llvm.pow.f64')
-            register = 'pow_{}'.format(self.state.uid())
-            self.program.append('%{} = tail call fast double @llvm.pow.f64(double {}, double {}) #0'.format(register, a, b))
+        operand = self.state.expression_operand_queue.pop()
+        if operator == 'n':
+            register = self.negate(operand)
         else:
-            operator_to_instruction = {
-                '+': 'fadd',
-                '-': 'fsub',
-                '*': 'fmul',
-                '/': 'fdiv',
-            }
-            instruction = operator_to_instruction[operator]
-            register = '{}_{}'.format(instruction, self.state.uid())
-            self.program.append('%{} = {} fast double {}, {}'.format(register, instruction, a, b))
+            operand_2 = self.state.expression_operand_queue.pop()
+            if operator == '↑':
+                self.state.external_symbols.add('llvm.pow.f64')
+                register = '%pow_{}'.format(self.state.uid())
+                self.program.append('{} = tail call fast double @llvm.pow.f64(double {}, double {}) #0'.format(register, operand, operand_2))
+            else:
+                operator_to_instruction = {
+                    '+': 'fadd',
+                    '-': 'fsub',
+                    '*': 'fmul',
+                    '/': 'fdiv',
+                }
+                instruction = operator_to_instruction[operator]
+                register = '%{}_{}'.format(instruction, self.state.uid())
+                self.program.append('{} = {} fast double {}, {}'.format(register, instruction, operand, operand_2))
         self.state.expression_operand_queue.append(register)
 
     def evaluate_scope(self):
@@ -241,27 +245,24 @@ class LlvmIrGenerator:
             raise SemanticError('Unknown function identifier: {}'.format())
 
         self.state.external_symbols.add(implementation)
-        register = '{}{}'.format(function, self.state.uid())
+        register = '%{}{}'.format(function, self.state.uid())
         operand = self.state.expression_operand_queue.pop()
         if function == 'RND':
             # Call rand, cast to double and divide by RAND_MAX (platform-specific, 2147483647 on Linux)
-            self.program.append('%{}_int = call i32 @rand() #0'.format(register))
-            self.program.append('%{r}_double = sitofp i32 %{r}_int to double'.format(r=register))
-            self.program.append('%{r} = fdiv double %{r}_double, 2147483647.'.format(r=register))
+            self.program.append('{}_int = call i32 @rand() #0'.format(register))
+            self.program.append('{r}_double = sitofp i32 {r}_int to double'.format(r=register))
+            self.program.append('{r} = fdiv double {r}_double, 2147483647.'.format(r=register))
         else:
-            self.program.append('%{} = tail call fast double @{}(double {}) #0'.format(register, implementation, operand))
+            self.program.append('{} = tail call fast double @{}(double {}) #0'.format(register, implementation, operand))
         self.state.expression_operand_queue.append(register)
 
     def operator(self, operator):
         if self.state.expression_operator_queue:
             # If pending operators are stacked, first check if current operator can be stacked given its priority
-            current_priority = operator_priority(operator)
             queue_top_priority = operator_priority(self.state.expression_operator_queue[-1])
-            if current_priority <= queue_top_priority:
+            if operator_priority(operator) <= queue_top_priority:
                 # Can't stack, evaluate previous expression first
-                raise NotImplementedError()  # TODO test this path
                 self.evaluate_scope()
-                return
         self.state.expression_operator_queue.append(operator.upper())
 
     def end_expression(self, _):
@@ -303,9 +304,6 @@ class LlvmIrGenerator:
 
     def print_expression_result(self, _):
         result = self.state.expression_operand_queue.pop()
-        if isinstance(result, str):
-            # Add local register prefix if result is in a register
-            result = '%{}'.format(result)
         self.state.print_parameters.append(result)
         assert not self.state.expression_operand_queue  # queue should be empty after evaluation
 

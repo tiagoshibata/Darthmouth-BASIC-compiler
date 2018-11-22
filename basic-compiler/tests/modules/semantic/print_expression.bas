@@ -4,3 +4,5 @@
 400 PRINT SIN(0)
 500 PRINT sin(0)
 600 PRINT -COS(0)
+700 PRINT 5 * 2 + 7
+800 PRINT ---(7 + 5 * 2) + 2

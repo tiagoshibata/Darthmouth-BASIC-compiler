@@ -72,6 +72,7 @@ class SemanticState:
         self.external_symbols = set()
         self.expression_operator_queue = []
         self.expression_operand_queue = []
+        self.let_lvalue = None
         self.print_parameters = []
 
     def uid(self):
@@ -260,6 +261,17 @@ class LlvmIrGenerator:
     def end_expression(self, _):
         # Pop queued operators until '(' or start of expression is found
         self.evaluate_scope()
+
+    def let_lvalue(self, variable):
+        variable = variable.upper()
+        self.state.variables.add(variable)
+        self.state.let_lvalue = variable
+
+    def let_rvalue(self, _):
+        result = self.state.expression_operand_queue.pop()
+        self.program.append('store double {}, double* @{}, align 8'.format(result, self.state.let_lvalue))
+        assert not self.state.expression_operand_queue  # queue should be empty after evaluation
+        self.state.let_lvalue = None
 
     def read_item(self, variable):
         self.state.variables.add(variable)

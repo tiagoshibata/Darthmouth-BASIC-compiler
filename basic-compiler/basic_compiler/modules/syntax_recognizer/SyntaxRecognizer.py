@@ -63,7 +63,18 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition(('identifier', 'END'), 'end', self.ir_generator.end),
             ]),
 
-            'let': State(None),  # TODO
+            'let': State(None, [
+                Transition('variable', 'let_assign', self.ir_generator.let_lvalue),
+            ]),
+            'let_assign': State(None, [
+                Transition(('special', '='), 'let_rvalue'),
+            ]),
+            'let_rvalue': State(None, [
+                Transition(exp_fsm, 'let_end'),
+            ]),
+            'let_end': State(None, [
+                Transition('end_of_line', 'start', self.ir_generator.let_rvalue),
+            ]),
 
             'read': State(None, [
                 Transition('variable', 'end_of_read', self.ir_generator.read_item),

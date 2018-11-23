@@ -50,6 +50,7 @@ def create_event_engine():
     ('jump_to_data.bas', ''),
     ('print.bas', '\ntest\ntest without a new line\n'),
     ('print_expression.bas', '1.000000\n2.000000\n-2.000000\n0.000000\n0.000000\n-1.000000\n17.000000\n-15.000000\n'),
+    ('fibonacci.bas', '1.000000\n2.000000\n-2.000000\n0.000000\n0.000000\n-1.000000\n17.000000\n-15.000000\n'),
 ])
 def test_compiler_end_to_end(source_filename, expected_output):
     event_engine = EventEngine([

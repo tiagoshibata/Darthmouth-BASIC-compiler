@@ -8,8 +8,8 @@ class AsciiCategorizer(EventDrivenModule):
         }
 
     def ascii_line_handler(self, event):
-        line = event[0]
-        for c in line:
+        self.line = event[0]
+        for self.position, c in enumerate(self.line):
             if c.isalpha():
                 self.add_external_event(('ascii_character', c))
             elif c.isnumeric():
@@ -20,3 +20,6 @@ class AsciiCategorizer(EventDrivenModule):
                 self.add_external_event(('ascii_ctrl', c))
             else:
                 self.add_external_event(('ascii_special', c))
+
+    def report(self):
+        return '{}{}'.format(self.line, '{}^'.format(' ' * (18 + self.position)))

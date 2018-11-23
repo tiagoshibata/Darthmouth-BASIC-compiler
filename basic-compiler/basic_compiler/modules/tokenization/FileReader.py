@@ -16,17 +16,22 @@ class FileReader(EventDrivenModule):
             import sys
             print(e, file=sys.stderr)
             raise SystemExit(1)
+        self.line_count = 0
         self.add_event(('read',))
 
     def read_handler(self, event):
-        line = self.file.readline()
-        if not line:
+        self.line = self.file.readline()
+        if not self.line:
             self.add_event(('close',))
             return
-        self.add_external_event(('ascii_line', line))
+        self.line_count += 1
+        self.add_external_event(('ascii_line', self.line))
         self.add_event(('read',))
 
     def close_handler(self, event):
         self.file.close()
         self.file = None
         self.add_external_event(('eof', None))
+
+    def report(self):
+        return 'Line {}: {}'.format(self.line_count, self.line)

@@ -23,5 +23,11 @@ class EventEngine:
 
     def start(self, event):
         self.add_event(event)
-        while self.handle_next_dependent_event():
-            pass
+        try:
+            while self.handle_next_dependent_event():
+                pass
+        except:
+            import sys
+            report = '\n'.join('{}: {}'.format(type(x).__name__, x.report()) for x in self.modules if getattr(x, 'report', None))
+            print(report, file=sys.stderr)
+            raise

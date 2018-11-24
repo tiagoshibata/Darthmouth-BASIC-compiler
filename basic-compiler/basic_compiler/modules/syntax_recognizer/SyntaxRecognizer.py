@@ -20,10 +20,10 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition('identifier', 'function_call', self.ir_generator.operator),
             ]),
             'nested_expression': State(None, [
-                Transition(exp_fsm, 'end_of_nested_expression'),  # TODO
+                Transition(exp_fsm, 'end_of_nested_expression', self.ir_generator.end_nested_expression),
             ]),
             'end_of_nested_expression': State(None, [
-                Transition(('special', ')'), 'end_expression', self.ir_generator.end_nested_expression),
+                Transition(('special', ')'), 'end_expression'),
             ]),
             'function_call': State(None, [
                 Transition(('special', '('), 'nested_expression', self.ir_generator.operator),
@@ -70,10 +70,7 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition(('special', '='), 'let_rvalue'),
             ]),
             'let_rvalue': State(None, [
-                Transition(exp_fsm, 'let_end'),
-            ]),
-            'let_end': State(None, [
-                Transition('end_of_line', 'start', self.ir_generator.let_rvalue),
+                Transition(exp_fsm, 'end', self.ir_generator.let_rvalue),
             ]),
 
             'read': State(None, [
@@ -102,20 +99,17 @@ class SyntaxRecognizer(EventDrivenModule):
 
             'print': State(None, [
                 Transition('end_of_line', 'start', self.ir_generator.print_newline),
-                Transition('string', 'print_string', self.ir_generator.print),
-                Transition(exp_fsm, 'print_exp_result'),
+                Transition('string', 'print_after_string', self.ir_generator.print),
+                Transition(exp_fsm, 'print_after_exp', self.ir_generator.print_expression_result),
             ]),
-            'print_string': State(None, [
+            'print_after_string': State(None, [
                 Transition(('special', ','), 'print_after_comma'),
                 Transition('end_of_line', 'start', self.ir_generator.print_end_with_newline),
-                Transition(exp_fsm, 'print_exp_result'),
+                Transition(exp_fsm, 'print_exp_result', self.ir_generator.print_expression_result),
             ]),
             'print_after_comma': State(None, [
                 Transition('end_of_line', 'start', self.ir_generator.print_end),
                 Transition(exp_fsm, 'print_exp_result'),
-            ]),
-            'print_exp_result': State(None, [
-                Transition(None, 'print_after_exp', self.ir_generator.print_expression_result),
             ]),
             'print_after_exp': State(None, [
                 Transition(('special', ','), 'print_after_comma'),

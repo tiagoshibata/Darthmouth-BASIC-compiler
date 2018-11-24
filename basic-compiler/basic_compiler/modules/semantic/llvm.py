@@ -74,6 +74,9 @@ class SemanticState:
         self.expression_operand_queue = []
         self.let_lvalue = None
         self.print_parameters = []
+        self.if_left_exp = None
+        self.if_cond = None
+        self.if_cond_register = None
 
     def uid(self):
         self.uid_count += 1
@@ -354,6 +357,37 @@ class LlvmIrGenerator:
         target = label_to_int(target)
         self.state.goto_targets.add(target)
         self.program.append('br label %label_{}'.format(target))
+
+    def if_left_exp(self, _):
+        self.state.if_left_exp = self.state.expression_operand_queue.pop()
+        assert not self.state.expression_operand_queue  # queue should be empty after evaluation
+
+    def if_operator(self, operator):
+        operator_to_cond = {
+            '=': 'oeq',
+            '>': 'ogt',
+            '>=': 'oge',
+            '<': 'olt',
+            '<=': 'ole',
+            '<>': 'one',
+        }
+        cond = operator_to_cond.get(operator)
+        if not cond:
+            raise SemanticError('Unknown operator: {}'.format(operator))
+        self.state.if_cond = cond
+
+    def if_right_exp(self, _):
+        if_right_exp = self.state.expression_operand_queue.pop()
+        assert not self.state.expression_operand_queue  # queue should be empty after evaluation
+        self.state.if_cond_register = '%cond{}'.format(self.state.uid())
+        self.program.append('{} = fcmp {} double {}, {}'.format(self.state.if_cond_register, self.state.if_cond, self.state.if_left_exp, if_right_exp))
+
+    def if_target(self, target):
+        target = label_to_int(target)
+        self.state.goto_targets.add(target)
+        if_unequal = 'cond_false_{}'.format(self.state.uid())
+        self.program.append('br i1 {}, label %label_{}, label %{}'.format(self.state.if_cond_register, target, if_unequal))
+        self.program.append('{}:'.format(if_unequal))
 
     def def_statement(self, potato):  # TODO
         pass

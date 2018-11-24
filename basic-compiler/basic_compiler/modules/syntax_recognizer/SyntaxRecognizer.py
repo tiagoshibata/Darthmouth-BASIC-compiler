@@ -122,7 +122,23 @@ class SyntaxRecognizer(EventDrivenModule):
             'goto': State(None, [
                 Transition('number', 'end', self.ir_generator.goto),
             ]),
-            'if': State(None),  # TODO
+
+            'if': State(None, [
+                Transition(exp_fsm, 'if_operator', self.ir_generator.if_left_exp),
+            ]),
+            'if_operator': State(None, [
+                Transition('special', 'if_right_exp', self.ir_generator.if_operator),
+            ]),
+            'if_right_exp': State(None, [
+                Transition(exp_fsm, 'if_then', self.ir_generator.if_right_exp),
+            ]),
+            'if_then': State(None, [
+                Transition(('identifier', 'THEN'), 'if_target'),
+            ]),
+            'if_target': State(None, [
+                Transition('number', 'end', self.ir_generator.if_target),
+            ]),
+
             'for': State(None),  # TODO
             'next': State(None),  # TODO
             'dim': State(None),  # TODO

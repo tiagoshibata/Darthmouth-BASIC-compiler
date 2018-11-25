@@ -178,7 +178,7 @@ class LlvmIrGenerator:
 
     def variable(self, variable):
         self.state.variables.add(variable)
-        register = '%{}{}'.format(variable, self.state.uid())
+        register = '%{}_{}'.format(variable, self.state.uid())
         self.program.append('{} = load double, double* @{}, align 8'.format(register, variable))
         self.state.expression_operand_queue.append(register)
 
@@ -241,7 +241,7 @@ class LlvmIrGenerator:
             raise SemanticError('Unknown function identifier: {}'.format(function))
 
         self.state.external_symbols.add(implementation)
-        register = '%{}{}'.format(function, self.state.uid())
+        register = '%{}_{}'.format(function, self.state.uid())
         operand = self.state.expression_operand_queue.pop()
         if function == 'RND':
             # Call rand, cast to double and divide by RAND_MAX (platform-specific, 2147483647 on Linux)
@@ -270,23 +270,26 @@ class LlvmIrGenerator:
         self.state.variables.add(variable)
         self.state.let_lvalue = variable
 
-    def let_rvalue(self, _):
+    def assign_to(self, lvalue):
         result = self.state.expression_operand_queue.pop()
-        self.program.append('store double {}, double* @{}, align 8'.format(result, self.state.let_lvalue))
         assert not self.state.expression_operand_queue  # queue should be empty after evaluation
+        self.program.append('store double {}, double* @{}, align 8'.format(result, lvalue))
+
+    def let_rvalue(self, _):
+        self.assign_to(self.state.let_lvalue)
         self.state.let_lvalue = None
 
     def read_item(self, variable):
         self.state.variables.add(variable)
         self.state.has_read = True
         i = self.state.uid()
-        self.program.append('%i{} = load i32, i32* @data_index, align 4'.format(i))
+        self.program.append('%i_{} = load i32, i32* @data_index, align 4'.format(i))
         self.program.append(lambda state:
-            '%tmp{i} = getelementptr [{len} x double], [{len} x double]* @DATA, i32 0, i32 %i{i}'.format(len=len(state.const_data), i=i))
-        self.program.append('%data_value{i} = load double, double* %tmp{i}, align 8'.format(i=i))
-        self.program.append('store double %data_value{}, double* @{}, align 8'.format(i, variable))
-        self.program.append('%i{i}_inc = add i32 %i{i}, 1'.format(i=i))
-        self.program.append('store i32 %i{}_inc, i32* @data_index, align 4'.format(i))
+            '%tmp_{i} = getelementptr [{len} x double], [{len} x double]* @DATA, i32 0, i32 %i_{i}'.format(len=len(state.const_data), i=i))
+        self.program.append('%data_value_{i} = load double, double* %tmp_{i}, align 8'.format(i=i))
+        self.program.append('store double %data_value_{}, double* @{}, align 8'.format(i, variable))
+        self.program.append('%i_{i}_inc = add i32 %i_{i}, 1'.format(i=i))
+        self.program.append('store i32 %i_{}_inc, i32* @data_index, align 4'.format(i))
 
     def data_item(self, value):
         try:
@@ -336,7 +339,7 @@ class LlvmIrGenerator:
                 # Load global variable
                 self.state.variables.add(element)
                 format_parameters.append('%f')
-                load_tmp = '%{}{}'.format(element, self.state.uid())
+                load_tmp = '%{}_{}'.format(element, self.state.uid())
                 self.program.append('{} = load double, double* @{}, align 8'.format(load_tmp, element))
                 va_args.append('double {}'.format(load_tmp))
 
@@ -379,7 +382,7 @@ class LlvmIrGenerator:
     def if_right_exp(self, _):
         if_right_exp = self.state.expression_operand_queue.pop()
         assert not self.state.expression_operand_queue  # queue should be empty after evaluation
-        self.state.if_cond_register = '%cond{}'.format(self.state.uid())
+        self.state.if_cond_register = '%cond_{}'.format(self.state.uid())
         self.program.append('{} = fcmp {} double {}, {}'.format(self.state.if_cond_register, self.state.if_cond, self.state.if_left_exp, if_right_exp))
 
     def if_target(self, target):
@@ -395,7 +398,7 @@ class LlvmIrGenerator:
     def gosub(self, target):
         target = label_to_int(target)
         self.state.gosub_targets.add(target)
-        self.program.append('tail call void %label_{}()'.format(target))
+        self.program.append('tail call void @program(i8* blockaddress(@program, %label_{})) #0'.format(target))
 
     def return_statement(self, token):
         self.program.append('ret void')

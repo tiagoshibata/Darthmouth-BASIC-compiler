@@ -412,10 +412,15 @@ class LlvmIrGenerator:
         self.assign_to(self.state.for_context[-1].variable)
 
     def for_right_exp(self, _):
-        right_exp_variable = 'for_{}_end_{}'.format(self.state.for_context[-1].variable, self.state.uid())
-        self.state.private_globals.append('@{} = internal global double 0., align 8'.format(right_exp_variable))
-        self.assign_to(right_exp_variable)
-        self.state.for_context[-1].end = right_exp_variable
+        if isinstance(self.state.expression_operand_queue[-1], float):
+            # Literal number
+            end = self.state.expression_operand_queue.pop()
+        else:
+            right_exp_variable = 'for_{}_end_{}'.format(self.state.for_context[-1].variable, self.state.uid())
+            self.state.private_globals.append('@{} = internal global double 0., align 8'.format(right_exp_variable))
+            self.assign_to(right_exp_variable)
+            end = right_exp_variable
+        self.state.for_context[-1].end = end
 
     def for_step_value(self, value):
         self.state.expression_operand_queue
@@ -423,7 +428,7 @@ class LlvmIrGenerator:
             # Implicit 1 step
             step = value
         elif isinstance(self.state.expression_operand_queue[-1], float):
-            # Integer literal step
+            # Literal number step
             step = self.state.expression_operand_queue.pop()
         else:
             variable = self.state.for_context[-1].variable
@@ -458,19 +463,22 @@ class LlvmIrGenerator:
         self.program.append('%{} = fadd fast double %{}, {}'.format(new_value, old_value, step_value))
         self.program.append('store double %{}, double* @{}, align 8'.format(new_value, variable))
         # Load end value
-        end_value = 'end_{}_{}'.format(variable, self.state.uid())
-        self.program.append('%{} = load double, double* @{}, align 8'.format(end_value, end))
+        if isinstance(end, float):
+            end_value = end
+        else:
+            end_value = '%end_{}_{}'.format(variable, self.state.uid())
+            self.program.append('{} = load double, double* @{}, align 8'.format(end_value, end))
         will_jump = 'will_jump_{}'.format(self.state.uid())
         for_exit = 'for_exit_{}'.format(self.state.uid())
         if isinstance(step, float):
             # Step is a literal, so generate a different code path based on its sign
             if step > 0:
                 # If new_value <= end, jump to loop, else continue execution
-                self.program.append('%{} = fcmp ole double %{}, %{}'.format(will_jump, new_value, end_value))
+                self.program.append('%{} = fcmp ole double %{}, {}'.format(will_jump, new_value, end_value))
                 self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
             else:
                 # If new_value >= end, jump to loop, else continue execution
-                self.program.append('%{} = fcmp oge double %{}, %{}'.format(will_jump, new_value, end_value))
+                self.program.append('%{} = fcmp oge double %{}, {}'.format(will_jump, new_value, end_value))
                 self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
         else:
             # Step is an expression, generate code to check its sign
@@ -482,12 +490,12 @@ class LlvmIrGenerator:
             # If step >= 0
             self.program.append('{}:'.format(positive))
             # If new_value <= end, jump to loop, else continue execution
-            self.program.append('%{} = fcmp ole double %{}, %{}'.format(will_jump, new_value, end_value))
+            self.program.append('%{} = fcmp ole double %{}, {}'.format(will_jump, new_value, end_value))
             self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
             # step < 0
             self.program.append('{}:'.format(negative))
             # If new_value >= end, jump to loop, else continue execution
-            self.program.append('%{} = fcmp oge double %{}, %{}'.format(will_jump, new_value, end_value))
+            self.program.append('%{} = fcmp oge double %{}, {}'.format(will_jump, new_value, end_value))
             self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
         # Exit of for loop
         self.program.append('{}:'.format(for_exit))

@@ -346,13 +346,6 @@ class LlvmIrGenerator:
                 # Create a constant string
                 str_id, str_len = self.const_string(element)
                 va_args.append('i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {str_id}, i64 0, i64 0)'.format(len=str_len, str_id=str_id))
-            else:
-                # Load global variable
-                self.state.variables.add(element)
-                format_parameters.append('%f')
-                load_tmp = '%{}_{}'.format(element, self.state.uid())
-                self.program.append('{} = load double, double* @{}, align 8'.format(load_tmp, element))
-                va_args.append('double {}'.format(load_tmp))
 
         format_string_id, length = self.const_string(' '.join(format_parameters) + suffix)
         self.program.append(

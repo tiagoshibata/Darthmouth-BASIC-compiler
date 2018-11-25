@@ -70,24 +70,6 @@ TRANSITION_TABLE = {
     'eof': State(None),
 }
 
-# 'number': (True, [
-#     (('ascii_character', 'E'), 'scientific_notation_number'),
-#     ('ascii_character', None),
-#     ('ascii_digit', 'number'),
-# ]),
-# 'scientific_notation_number': (False, [
-#     (('ascii_character', '+'), 'scientific_notation_number_exponent_after_sign'),
-#     (('ascii_character', '-'), 'scientific_notation_number_exponent_after_sign'),
-#     ('ascii_digit', 'scientific_notation_number_exponent_value'),
-# ]),
-# 'scientific_notation_number_exponent_after_sign': (False, [
-#     ('ascii_digit', 'scientific_notation_number_exponent_value'),
-# ]),
-# 'scientific_notation_number_exponent_value': (True, [
-#     ('ascii_digit', 'scientific_notation_number_exponent_value'),
-#     ('ascii_character', None),
-# ]),
-
 
 class Tokenizer(EventDrivenModule):
     def transition_on_event(self, event_name):

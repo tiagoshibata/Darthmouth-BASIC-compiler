@@ -41,6 +41,10 @@ def create_event_engine():
     ])
 
 
+def format_float(n):
+    return '{0:.6f}\n'.format(n)
+
+
 @lli
 @pytest.mark.parametrize('source_filename,expected_output', [
     ('empty.bas', ''),
@@ -49,8 +53,9 @@ def create_event_engine():
     ('read.bas', ''),
     ('jump_to_data.bas', ''),
     ('print.bas', '\ntest\ntest without a new line\n'),
-    ('print_expression.bas', '1.000000\n2.000000\n-2.000000\n0.000000\n0.000000\n-1.000000\n17.000000\n-15.000000\n'),
-    ('fibonacci.bas', '0.000000\n1.000000\n1.000000\n2.000000\n3.000000\n5.000000\n8.000000\n'),
+    ('print_expression.bas', ''.join(format_float(x) for x in [1, 2, -2, 0, 0, -1, 17, -15])),
+    ('fibonacci.bas', ''.join(format_float(x) for x in [0, 1, 1, 2, 3, 5, 8])),
+    ('for.bas', ''.join(format_float(x) for x in range(0, 11))),
 ])
 def test_compiler_end_to_end(source_filename, expected_output):
     event_engine = EventEngine([

@@ -77,6 +77,7 @@ class SemanticState:
         self.if_left_exp = None
         self.if_cond = None
         self.if_cond_register = None
+        self.for_context = []
 
     def uid(self):
         self.uid_count += 1
@@ -135,6 +136,14 @@ def operator_priority(operator):
     return priority
 
 
+class ForContext:
+    def __init__(self, variable):
+        self.variable = variable
+        self.end = None
+        self.step = None
+        self.label = None
+
+
 class LlvmIrGenerator:
     def __init__(self, filename):
         self.state = SemanticState(os.path.basename(filename))
@@ -149,6 +158,8 @@ class LlvmIrGenerator:
         if not self.state.entry_point:
             # First label is the entry point
             self.state.entry_point = identifier
+        if self.state.for_context and not self.state.for_context[-1].label:
+            self.state.for_context[-1].label = label
         self.state.defined_labels.add(identifier)
         if not is_block_terminator(self.program.instructions[-1]):
             self.program.append(lambda state: ('br label %{}'.format(label) if identifier in state.goto_targets | state.gosub_targets else None))
@@ -392,6 +403,92 @@ class LlvmIrGenerator:
         self.program.append('br i1 {}, label %label_{}, label %{}'.format(self.state.if_cond_register, target, if_unequal))
         self.program.append('{}:'.format(if_unequal))
 
+    def for_variable(self, variable):
+        variable = variable.upper()
+        self.state.variables.add(variable)
+        self.state.for_context.append(ForContext(variable))
+
+    def for_left_exp(self, _):
+        self.assign_to(self.state.for_context[-1].variable)
+
+    def for_right_exp(self, _):
+        right_exp_variable = 'for_{}_end_{}'.format(self.state.for_context[-1].variable, self.state.uid())
+        self.state.private_globals.append('@{} = internal global double 0., align 8'.format(right_exp_variable))
+        self.assign_to(right_exp_variable)
+        self.state.for_context[-1].end = right_exp_variable
+
+    def for_step_value(self, value):
+        self.state.expression_operand_queue
+        if isinstance(value, float):
+            # Implicit 1 step
+            step = value
+        elif isinstance(self.state.expression_operand_queue[-1], float):
+            # Integer literal step
+            step = self.state.expression_operand_queue.pop()
+        else:
+            variable = self.state.for_context[-1].variable
+            step = 'for_{}_step_{}'.format(variable, self.state.uid())
+            self.state.private_globals.append('@{} = internal global double 0., align 8'.format(step))
+            self.assign_to(step)
+        self.state.for_context[-1].step = step
+
+    def next(self, variable):
+        variable = variable.upper()
+        if not self.state.for_context:
+            raise SemanticError('NEXT has no matching FOR')
+        for_context = self.state.for_context.pop()
+        if variable != for_context.variable:
+            raise SemanticError('NEXT and matching FOR have different counter variables ({} and {})'.format(variable, for_context.variable))
+
+        step = for_context.step
+        label = for_context.label
+        end = for_context.end
+        self.state.goto_targets.add(label)
+        old_value = '{}_{}'.format(variable, self.state.uid())
+        self.program.append('%{} = load double, double* @{}, align 8'.format(old_value, variable))
+        new_value = 'new_{}_{}'.format(variable, self.state.uid())
+        if isinstance(step, float):
+            step_value = step
+        else:
+            # Load step
+            step_value = '%step_{}'.format(self.state.uid())
+            self.program.append('{} = load double, double* @{}, align 8'.format(step_value, step))
+        self.program.append('%{} = fadd fast double %{}, {}'.format(new_value, old_value, step_value))
+        self.program.append('store double {}, double* @{}, align 8'.format(new_value, variable))
+        will_jump = 'will_jump_{}'.format(self.state.uid())
+        for_exit = 'for_exit_{}'.format(self.state.uid())
+        if isinstance(step, float):
+            # Step is a literal, so generate a different code path based on its sign
+            if step > 0:
+                # If new_value < end, jump to loop, else continue execution
+                self.program.append('%{} = fcmp olt double %{}, %{}'.format(will_jump, new_value, end))
+                self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
+            else:
+                # If new_value > end, jump to loop, else continue execution
+                self.program.append('%{} = fcmp ogt double %{}, %{}'.format(will_jump, new_value, end))
+                self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
+        else:
+            # Step is an expression, generate code to check its sign
+            sign = 'step_sign_{}'.format(self.state.uid())
+            positive = 'positive_{}'.format(self.state.uid())
+            negative = 'negative_{}'.format(self.state.uid())
+            self.program.append('%{} = fcmp oge double {}, 0.'.format(sign, step_value))
+            self.program.append('br i1 %{}, label %{}, label %{}'.format(sign, positive, negative))
+            # If step >= 0
+            self.program.append('{}:'.format(positive))
+            # If new_value < end, jump to loop, else continue execution
+            self.program.append('%{} = fcmp olt double %{}, %{}'.format(will_jump, new_value, end))
+            self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
+            # step < 0
+            self.program.append('{}:'.format(negative))
+            # If new_value > end, jump to loop, else continue execution
+            self.program.append('%{} = fcmp ogt double %{}, %{}'.format(will_jump, new_value, end))
+            self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
+        # Exit of for loop
+        self.program.append('{}:'.format(for_exit))
+        self.state.external_symbols.add('llvm.donothing')
+        self.program.append('tail call void @llvm.donothing() nounwind readnone')
+
     def def_statement(self, potato):  # TODO
         pass
 
@@ -416,6 +513,7 @@ class LlvmIrGenerator:
             'exit': 'declare void @exit(i32) local_unnamed_addr noreturn #0',
             'printf': 'declare i32 @printf(i8* nocapture readonly, ...) local_unnamed_addr #0',
             'putchar': 'declare i32 @putchar(i32) local_unnamed_addr #0',
+            'llvm.donothing': 'declare void @llvm.donothing() nounwind readnone',
 
             # Language built-ins
             'llvm.sin.f64': 'declare double @llvm.sin.f64(double) local_unnamed_addr #0',

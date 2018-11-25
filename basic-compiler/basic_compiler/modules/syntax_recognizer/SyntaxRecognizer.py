@@ -139,8 +139,32 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition('number', 'end', self.ir_generator.if_target),
             ]),
 
-            'for': State(None),  # TODO
-            'next': State(None),  # TODO
+            'for': State(None, [
+                Transition('variable', 'for_=', self.ir_generator.for_variable),
+            ]),
+            'for_=': State(None, [
+                Transition(('special', '='), 'for_left_exp'),
+            ]),
+            'for_left_exp': State(None, [
+                Transition(exp_fsm, 'for_to', self.ir_generator.for_left_exp),
+            ]),
+            'for_to': State(None, [
+                Transition(('identifier', 'TO'), 'for_right_exp'),
+            ]),
+            'for_right_exp': State(None, [
+                Transition(exp_fsm, 'for_step', self.ir_generator.for_right_exp),
+            ]),
+            'for_step': State(None, [
+                Transition(('identifier', 'STEP'), 'for_step_value'),
+                Transition('end_of_line', 'start', lambda _: self.ir_generator.for_step_value(1.)),
+            ]),
+            'for_step_value': State(None, [
+                Transition(exp_fsm, 'end', self.ir_generator.for_step_value),
+            ]),
+
+            'next': State(None, [
+                Transition('variable', 'end', self.ir_generator.next),
+            ]),
             'dim': State(None),  # TODO
             'def': State(None),  # TODO
             'gosub': State(None, [

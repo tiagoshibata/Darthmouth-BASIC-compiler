@@ -210,6 +210,7 @@ class LlvmIrGenerator:
             return 'double* @{}, align 8'.format(variable)
         # Multidimensional, convert operands to int and call getelementptr
         ptr_index = []
+        dims_is_constant_expression = True
         for d in dims:
             if isinstance(d, float):
                 # Number literal
@@ -217,13 +218,20 @@ class LlvmIrGenerator:
             else:
                 # Convert expression result to int
                 register = '%fptoui_{}'.format(self.state.uid())
-                self.program.append('{} = fptoui double {} to i64'.format(register, d))
+                self.program.append('{} = fptoui double {} to i32'.format(register, d))
                 ptr_index.append(register)
-        ptr_index = ', '.join('i64 {}'.format(x) for x in ptr_index)
-        return 'double* getelementptr inbounds ({dims}, {dims}* @{var}, {index}), align 16'.format(
-                dims=dimensions_specifier(variable_dimensions),
-                var=variable,
-                index=ptr_index)
+                dims_is_constant_expression = False
+        ptr_index = ', '.join('i32 {}'.format(x) for x in ptr_index)
+        getelementptr = 'getelementptr inbounds {dims}, {dims}* @{var}, i32 0, {index}'.format(
+            dims=dimensions_specifier(variable_dimensions),
+            var=variable,
+            index=ptr_index)
+        if dims_is_constant_expression:
+            result = getelementptr
+        else:
+            result = '%ptr_{}'.format(self.state.uid())
+            self.program.append('{} = {}'.format(result, getelementptr))
+        return 'double* {}, align 16'.format(result)
 
     def end_of_variable(self, _):
         variable, dimensions = self.state.variable_dimension_queue.pop()
@@ -392,11 +400,11 @@ class LlvmIrGenerator:
                 format_parameters.append('%s')
                 # Create a constant string
                 str_id, str_len = self.const_string(element)
-                va_args.append('i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {str_id}, i64 0, i64 0)'.format(len=str_len, str_id=str_id))
+                va_args.append('i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {str_id}, i32 0, i32 0)'.format(len=str_len, str_id=str_id))
 
         format_string_id, length = self.const_string(' '.join(format_parameters) + suffix)
         self.program.append(
-            'tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {identifier}, i64 0, i64 0), '
+            'tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {identifier}, i32 0, i32 0), '
             '{va_args})'.format(
                 len=length,
                 identifier=format_string_id,

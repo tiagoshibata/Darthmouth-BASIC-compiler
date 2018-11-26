@@ -38,6 +38,7 @@ def create_event_engine():
         FileReader(),
         AsciiCategorizer(),
         Tokenizer(),
+        SyntaxRecognizer(),
     ])
 
 
@@ -56,14 +57,10 @@ def format_float(n):
     ('print_expression.bas', ''.join(format_float(x) for x in [1, 2, -2, 0, 0, -1, 17, -15])),
     ('fibonacci.bas', ''.join(format_float(x) for x in [0, 1, 1, 2, 3, 5, 8])),
     ('for.bas', ''.join(format_float(x) for x in range(0, 11))),
+    ('bubblesort.bas', ''),
 ])
 def test_compiler_end_to_end(source_filename, expected_output):
-    event_engine = EventEngine([
-        FileReader(),
-        AsciiCategorizer(),
-        Tokenizer(),
-        SyntaxRecognizer(),
-    ])
+    event_engine = create_event_engine()
 
     with io.StringIO() as f:
         with redirect_stdout(f):
@@ -71,3 +68,17 @@ def test_compiler_end_to_end(source_filename, expected_output):
         s = f.getvalue()
     assert s  # ensure code was generated
     assert lli_run(s) == expected_output
+
+
+def test_rand_end_to_end():
+    event_engine = create_event_engine()
+
+    with io.StringIO() as f:
+        with redirect_stdout(f):
+            event_engine.start(('open', base_dir / 'rand.bas'))
+        s = f.getvalue()
+    assert s  # ensure code was generated
+    output = lli_run(s)
+    for l in output.splitlines():
+        value = float(l.rstrip())
+        assert 0 <= value <= 1

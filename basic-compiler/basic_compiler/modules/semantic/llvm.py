@@ -546,7 +546,7 @@ class LlvmIrGenerator:
         self.dim_dimensions = []
 
     def dim_dimension(self, dimension):
-        self.dim_dimensions.append = dimension
+        self.dim_dimensions.append(dimension)
 
     def dim_end(self, _):
         self.state.variables.add(self.dim_variable)
@@ -585,7 +585,7 @@ class LlvmIrGenerator:
             'llvm.log.f64': 'declare double @llvm.log.f64(double) local_unnamed_addr #0',
             'llvm.sqrt.f64': 'declare double @llvm.sqrt.f64(double) local_unnamed_addr #0',
             'llvm.rint.f64': 'declare double @llvm.rint.f64(double) local_unnamed_addr #0',
-            'rand': 'declare i32 rand() local_unnamed_addr #0',
+            'rand': 'declare i32 @rand() local_unnamed_addr #0',
             'llvm.pow.f64': 'declare double @llvm.pow.f64(double, double) local_unnamed_addr #0',
         }
         return [DECLARATIONS[x] for x in sorted(self.state.external_symbols)]

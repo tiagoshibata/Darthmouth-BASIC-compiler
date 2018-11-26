@@ -78,6 +78,7 @@ class SemanticState:
         self.if_cond = None
         self.if_cond_register = None
         self.for_context = []
+        self.variable_dimensions = {}
 
     def uid(self):
         self.uid_count += 1
@@ -87,7 +88,7 @@ class SemanticState:
 class Main(Function):
     def __init__(self):
         super().__init__('main', return_type='i32', attributes='#1')
-        self.instructions.append(lambda state:
+        self.append(lambda state:
             ('musttail call void @program(i8* blockaddress(@program, %label_{})) #0'.format(state.entry_point) if state.entry_point else None))
         self.append('ret i32 0')
 
@@ -110,18 +111,24 @@ class Program(Function):
         self.append(indirect_branch)
 
 
-def label_to_int(identifier):
+def to_int(identifier):
     try:
         return int(identifier)
     except ValueError:
-        raise SemanticError('Label is not valid: {}'.format(identifier))
+        raise SemanticError('Not a valid int: {}'.format(identifier))
 
 
-def number_to_double(number):
+def to_double(number):
     try:
         return float(number)
     except ValueError:
-        raise SemanticError('Double is not valid: {}'.format(number))
+        raise SemanticError('Not a valid double: {}'.format(number))
+
+
+def dimensions_specifier(dimensions):
+    if not len(dimensions):
+        return 'double'
+    return '[{} x {}]'.format(dimensions[0], dimensions_specifier(dimensions[1:]))
 
 
 def operator_priority(operator):
@@ -151,7 +158,7 @@ class LlvmIrGenerator:
         self.state.functions.extend((self.program, Main()))
 
     def label(self, identifier):
-        identifier = label_to_int(identifier)
+        identifier = to_int(identifier)
         if identifier in self.state.defined_labels:
             raise SemanticError('Duplicate label {}'.format(identifier))
         label = 'label_{}'.format(identifier)
@@ -176,7 +183,7 @@ class LlvmIrGenerator:
         return False
 
     def number(self, number):
-        number = number_to_double(number)
+        number = to_double(number)
         # Negate the result if a unary negative precedes it
         if self.is_unary_negative():
             number = -number
@@ -188,9 +195,41 @@ class LlvmIrGenerator:
         return negated
 
     def variable(self, variable):
+        variable = variable.upper()
         self.state.variables.add(variable)
+        self.variable = variable
+        self.variable_dimensions = []
+
+    def variable_dimension(self, _):
+        self.variable_dimensions.append(self.state.expression_operand_queue.pop())
+
+    def end_of_variable(self, _):
+        variable_dimensions = self.state.variable_dimensions.get(self.variable, [])
+        if len(variable_dimensions) != len(self.variable_dimensions):
+            raise SemanticError('Variable dimensions mismatch (expected {}, got {})'.format(variable_dimensions, self.variable_dimensions))
         register = '%{}_{}'.format(variable, self.state.uid())
-        self.program.append('{} = load double, double* @{}, align 8'.format(register, variable))
+        if not variable_dimensions:
+            # Scalar
+            self.program.append('{} = load double, double* @{}, align 8'.format(register, variable))
+        else:
+            # Multidimensional, convert operands to int and call getelementptr
+            prt_index = []
+            for d in self.variable_dimensions:
+                if isinstance(d, float):
+                    # Number literal
+                    prt_index.append(int(d))
+                else:
+                    # Convert expression result to int
+                    register = '%fptoui_{}'.format(self.state.uid())
+                    self.program.append('{} = fptoui double {} to i64'.format(register, d))
+                    prt_index.append(register)
+            prt_index = ', '.join('i64 {}'.format(x) for x in prt_index)
+            self.program.append(
+                '{reg} = load double, double* getelementptr inbounds ({dims}, {dims}* @{var}, {index}), align 16'.format(
+                    reg=register,
+                    dims=dimensions_specifier(variable_dimensions),
+                    var=self.variable,
+                    index=prt_index))
         self.state.expression_operand_queue.append(register)
 
     def evaluate_expression(self):
@@ -361,7 +400,7 @@ class LlvmIrGenerator:
         self.print_end(_, suffix='\\0A')
 
     def goto(self, target):
-        target = label_to_int(target)
+        target = to_int(target)
         self.state.goto_targets.add(target)
         self.program.append('br label %label_{}'.format(target))
 
@@ -390,7 +429,7 @@ class LlvmIrGenerator:
         self.program.append('{} = fcmp {} double {}, {}'.format(self.state.if_cond_register, self.state.if_cond, self.state.if_left_exp, if_right_exp))
 
     def if_target(self, target):
-        target = label_to_int(target)
+        target = to_int(target)
         self.state.goto_targets.add(target)
         if_unequal = 'cond_false_{}'.format(self.state.uid())
         self.program.append('br i1 {}, label %label_{}, label %{}'.format(self.state.if_cond_register, target, if_unequal))
@@ -495,11 +534,19 @@ class LlvmIrGenerator:
         self.state.external_symbols.add('llvm.donothing')
         self.program.append('tail call void @llvm.donothing() nounwind readnone')
 
-    def def_statement(self, potato):  # TODO
-        pass
+    def dim_variable(self, variable):
+        self.dim_variable = variable.upper()
+        self.dim_dimensions = []
+
+    def dim_dimension(self, dimension):
+        self.dim_dimensions.append = dimension
+
+    def dim_end(self, _):
+        self.state.variables.add(self.dim_variable)
+        self.state.variable_dimensions[self.dim_variable] = self.dim_dimensions
 
     def gosub(self, target):
-        target = label_to_int(target)
+        target = to_int(target)
         self.state.gosub_targets.add(target)
         self.program.append('tail call void @program(i8* blockaddress(@program, %label_{})) #0'.format(target))
 
@@ -532,7 +579,7 @@ class LlvmIrGenerator:
             'llvm.sqrt.f64': 'declare double @llvm.sqrt.f64(double) local_unnamed_addr #0',
             'llvm.rint.f64': 'declare double @llvm.rint.f64(double) local_unnamed_addr #0',
             'rand': 'declare i32 rand() local_unnamed_addr #0',
-            'llvm.pow.f64': 'declare double @llvm.rint.f64(double, double) local_unnamed_addr #0',
+            'llvm.pow.f64': 'declare double @llvm.pow.f64(double, double) local_unnamed_addr #0',
         }
         return [DECLARATIONS[x] for x in sorted(self.state.external_symbols)]
 
@@ -554,10 +601,18 @@ class LlvmIrGenerator:
             self.state.private_globals.append('@data_index = internal global i32 0, align 4')
             self.state.private_globals.append('@DATA = private unnamed_addr constant [{} x double] {}, align 8'.format(len(self.state.const_data), data_array))
 
+        def declare_variable(var):
+            dimensions = self.state.variable_dimensions.get(var)
+            if not dimensions:
+                # Scalar
+                return '@{} = internal global double 0., align 8'.format(var)
+
+            return '@{} = internal global [{} x double] zeroinitializer, align 16'.format(var, dimensions_specifier(dimensions))
+
         header = [
             'source_filename = "{}"'.format(self.state.filename),
             *(x for x in sorted(self.state.private_globals)),
-            *('@{} = internal global double 0., align 8'.format(x) for x in sorted(self.state.variables)),
+            *(declare_variable(x) for x in sorted(self.state.variables)),
         ]
 
         body = [x.to_ll(self.state) for x in self.state.functions]

@@ -16,12 +16,25 @@ class SyntaxRecognizer(EventDrivenModule):
             'start_expression': State(None, [
                 Transition(('special', '('), 'nested_expression', self.ir_generator.operator),
                 Transition('number', 'end_expression', self.ir_generator.number),
-                Transition('variable', 'end_expression', self.ir_generator.variable),
+                Transition('variable', 'end_of_variable', self.ir_generator.variable),
                 Transition('identifier', 'function_call', self.ir_generator.operator),
             ]),
             'nested_expression': State(None, [
                 Transition(exp_fsm, 'end_of_nested_expression', self.ir_generator.end_nested_expression),
             ]),
+
+            'end_of_variable': State(None, [
+                Transition(('special', '('), 'variable_dimension'),
+                Transition(None, 'end_expression', self.ir_generator.end_of_variable),
+            ]),
+            'variable_dimension': State(None, [
+                Transition(exp_fsm, 'end_of_dimension', self.ir_generator.variable_dimension),
+            ]),
+            'end_of_dimension': State(None, [
+                Transition(('special', ','), 'variable_dimension'),
+                Transition(('special', ')'), 'end_expression', self.ir_generator.end_of_variable),
+            ]),
+
             'end_of_nested_expression': State(None, [
                 Transition(('special', ')'), 'end_expression'),
             ]),
@@ -165,7 +178,25 @@ class SyntaxRecognizer(EventDrivenModule):
             'next': State(None, [
                 Transition('variable', 'end', self.ir_generator.next),
             ]),
-            'dim': State(None),  # TODO
+
+            'dim': State(None, [
+                Transition('variable', 'dim_(', self.ir_generator.dim_variable),
+            ]),
+            'dim_(': State(None, [
+                Transition(('special', '('), 'dim_dimensions'),
+            ]),
+            'dim_dimensions': State(None, [
+                Transition('number', 'dim_dimension_end', self.ir_generator.dim_dimension),
+            ]),
+            'dim_dimension_end': State(None, [
+                Transition(('special', ','), 'dim_dimensions'),
+                Transition(('special', ')'), 'dim_end', self.ir_generator.dim_end),
+            ]),
+            'dim_end': State(None, [
+                Transition(('special', ','), 'dim'),
+                Transition('end_of_line', 'start'),
+            ]),
+
             'def': State(None),  # TODO
             'gosub': State(None, [
                 Transition('number', 'end', self.ir_generator.gosub),

@@ -77,7 +77,18 @@ class SyntaxRecognizer(EventDrivenModule):
             ]),
 
             'let': State(None, [
-                Transition('variable', 'let_assign', self.ir_generator.let_lvalue),
+                Transition('variable', 'let_variable_dimensions', self.ir_generator.lvalue),
+            ]),
+            'let_variable_dimensions': State(None, [
+                Transition(('special', '('), 'let_variable_dimension'),
+                Transition(None, 'let_assign'),
+            ]),
+            'let_variable_dimension': State(None, [
+                Transition(exp_fsm, 'let_end_of_dimension', self.ir_generator.lvalue_dimension),
+            ]),
+            'let_end_of_dimension': State(None, [
+                Transition(('special', ','), 'let_variable_dimension'),
+                Transition(('special', ')'), 'let_assign', self.ir_generator.lvalue_end),
             ]),
             'let_assign': State(None, [
                 Transition(('special', '='), 'let_rvalue'),
@@ -87,11 +98,22 @@ class SyntaxRecognizer(EventDrivenModule):
             ]),
 
             'read': State(None, [
-                Transition('variable', 'end_of_read', self.ir_generator.read_item),
+                Transition('variable', 'read_variable_dimensions', self.ir_generator.lvalue),
+            ]),
+            'read_variable_dimensions': State(None, [
+                Transition(('special', '('), 'read_variable_dimension'),
+                Transition(None, 'end_of_read'),
+            ]),
+            'read_variable_dimension': State(None, [
+                Transition(exp_fsm, 'read_end_of_dimension', self.ir_generator.lvalue_dimension),
+            ]),
+            'read_end_of_dimension': State(None, [
+                Transition(('special', ','), 'read_variable_dimension'),
+                Transition(('special', ')'), 'end_of_read', self.ir_generator.lvalue_end),
             ]),
             'end_of_read': State(None, [
-                Transition(('special', ','), 'read'),
-                Transition('end_of_line', 'start'),
+                Transition(('special', ','), 'read', self.ir_generator.read_item),
+                Transition('end_of_line', 'start', self.ir_generator.read_item),
             ]),
 
             'data': State(None, [

@@ -72,7 +72,6 @@ class SemanticState:
         self.external_symbols = set()
         self.expression_operator_queue = []
         self.expression_operand_queue = []
-        self.let_lvalue = None
         self.print_parameters = []
         self.if_left_exp = None
         self.if_cond = None
@@ -204,6 +203,7 @@ class LlvmIrGenerator:
         self.variable_dimensions.append(self.state.expression_operand_queue.pop())
 
     def end_of_variable(self, _):
+        variable = self.variable
         variable_dimensions = self.state.variable_dimensions.get(self.variable, [])
         if len(variable_dimensions) != len(self.variable_dimensions):
             raise SemanticError('Variable dimensions mismatch (expected {}, got {})'.format(variable_dimensions, self.variable_dimensions))
@@ -315,10 +315,16 @@ class LlvmIrGenerator:
         # Pop queued operators until '(' or start of expression is found
         self.evaluate_scope()
 
-    def let_lvalue(self, variable):
+    def lvalue(self, variable):
         variable = variable.upper()
         self.state.variables.add(variable)
-        self.state.let_lvalue = variable
+        self.lvalue = variable
+
+    def lvalue_dimension(self, dimension):
+        raise NotImplementedError()
+
+    def lvalue_end(self, variable):
+        raise NotImplementedError()
 
     def assign_to(self, lvalue):
         result = self.state.expression_operand_queue.pop()
@@ -326,18 +332,16 @@ class LlvmIrGenerator:
         self.program.append('store double {}, double* @{}, align 8'.format(result, lvalue))
 
     def let_rvalue(self, _):
-        self.assign_to(self.state.let_lvalue)
-        self.state.let_lvalue = None
+        self.assign_to(self.lvalue)
 
-    def read_item(self, variable):
-        self.state.variables.add(variable)
+    def read_item(self, _):
         self.state.has_read = True
         i = self.state.uid()
         self.program.append('%i_{} = load i32, i32* @data_index, align 4'.format(i))
         self.program.append(lambda state:
             '%tmp_{i} = getelementptr [{len} x double], [{len} x double]* @DATA, i32 0, i32 %i_{i}'.format(len=len(state.const_data), i=i))
         self.program.append('%data_value_{i} = load double, double* %tmp_{i}, align 8'.format(i=i))
-        self.program.append('store double %data_value_{}, double* @{}, align 8'.format(i, variable))
+        self.program.append('store double %data_value_{}, double* @{}, align 8'.format(i, self.lvalue))
         self.program.append('%i_{i}_inc = add i32 %i_{i}, 1'.format(i=i))
         self.program.append('store i32 %i_{}_inc, i32* @data_index, align 4'.format(i))
 

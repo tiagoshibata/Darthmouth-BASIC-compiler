@@ -72,7 +72,7 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition(('identifier', 'DEF'), 'def'),
                 Transition(('identifier', 'GOSUB'), 'gosub'),
                 Transition(('identifier', 'RETURN'), 'end', self.ir_generator.return_statement),
-                Transition(('identifier', 'REMARK'), 'remark'),
+                Transition(('identifier', 'REM'), 'remark'),
                 Transition(('identifier', 'END'), 'end', self.ir_generator.end),
             ]),
 
@@ -229,7 +229,7 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition('special', 'remark', self.ir_generator.remark),
                 Transition('string', 'remark', self.ir_generator.remark),
                 Transition('variable', 'remark', self.ir_generator.remark),
-                Transition('end_of_line', 'start'),
+                Transition('end_of_line', 'start', self.ir_generator.remark_end),
             ]),
             'end': State(None, [
                 Transition('end_of_line', 'start'),

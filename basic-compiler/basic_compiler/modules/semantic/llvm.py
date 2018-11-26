@@ -38,7 +38,7 @@ class Function:
         if not is_block_terminator(instructions[-1]):
             # Add a terminator if the body doesn't end with one
             final_semantic_state.external_symbols.add('exit')
-            instructions.append('musttail call void @exit(i32 0) noreturn nounwind')
+            instructions.append('tail call void @exit(i32 0) noreturn #0')
             instructions.append('unreachable')
         return '\n'.join((
             'define dso_local {} @{}({}) local_unnamed_addr {} {{'.format(self.return_type, self.name, self.arguments, self.attributes),
@@ -79,6 +79,7 @@ class SemanticState:
         self.for_context = []
         self.variable_dimensions = {}
         self.variable_dimension_queue = []
+        self.remark = []
 
     def uid(self):
         self.uid_count += 1
@@ -89,7 +90,7 @@ class Main(Function):
     def __init__(self):
         super().__init__('main', return_type='i32', attributes='#1')
         self.append(lambda state:
-            ('musttail call void @program(i8* blockaddress(@program, %label_{})) #0'.format(state.entry_point) if state.entry_point else None))
+            ('tail call void @program(i8* blockaddress(@program, %label_{})) #0'.format(state.entry_point) if state.entry_point else None))
         self.append('ret i32 0')
 
 
@@ -365,7 +366,7 @@ class LlvmIrGenerator:
 
     def print_newline(self, _):
         self.state.external_symbols.add('putchar')
-        self.program.append('tail call i32 @putchar(i32 10)')
+        self.program.append('tail call i32 @putchar(i32 10) #0')
 
     def const_string(self, literal, newline=False):
         # Create a constant null-terminated string, global to this module
@@ -404,8 +405,7 @@ class LlvmIrGenerator:
 
         format_string_id, length = self.const_string(' '.join(format_parameters) + suffix)
         self.program.append(
-            'tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {identifier}, i32 0, i32 0), '
-            '{va_args})'.format(
+            'tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {identifier}, i32 0, i32 0), {va_args}) #0'.format(
                 len=length,
                 identifier=format_string_id,
                 va_args=', '.join(va_args),
@@ -547,7 +547,7 @@ class LlvmIrGenerator:
         # Exit of for loop
         self.program.append('{}:'.format(for_exit))
         self.state.external_symbols.add('llvm.donothing')
-        self.program.append('tail call void @llvm.donothing() nounwind readnone')
+        self.program.append('tail call void @llvm.donothing() readnone #0')
 
     def dim_dimension(self, dimension):
         self.lvalue_dimensions.append(dimension)
@@ -565,11 +565,15 @@ class LlvmIrGenerator:
         self.program.append('ret void')
 
     def remark(self, text):
-        self.program.append('; {}'.format(text))
+        self.state.remark.append(text)
+
+    def remark_end(self, text):
+        self.program.append('; {}'.format(' '.join(self.state.remark)))
+        self.state.remark = []
 
     def end(self, event):
         self.state.external_symbols.add('exit')
-        self.program.append('musttail call void @exit(i32 0) noreturn nounwind')
+        self.program.append('tail call void @exit(i32 0) noreturn #0')
         self.program.append('unreachable')
 
     def external_symbols_declarations(self):
@@ -577,7 +581,7 @@ class LlvmIrGenerator:
             'exit': 'declare void @exit(i32) local_unnamed_addr noreturn #0',
             'printf': 'declare i32 @printf(i8* nocapture readonly, ...) local_unnamed_addr #0',
             'putchar': 'declare i32 @putchar(i32) local_unnamed_addr #0',
-            'llvm.donothing': 'declare void @llvm.donothing() nounwind readnone',
+            'llvm.donothing': 'declare void @llvm.donothing() local_unnamed_addr readnone #0',
 
             # Language built-ins
             'llvm.sin.f64': 'declare double @llvm.sin.f64(double) local_unnamed_addr #0',

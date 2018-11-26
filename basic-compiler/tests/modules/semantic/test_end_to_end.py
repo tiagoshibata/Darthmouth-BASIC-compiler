@@ -56,8 +56,8 @@ def format_float(n):
     ('print.bas', '\ntest\ntest without a new line\n'),
     ('print_expression.bas', ''.join(format_float(x) for x in [1, 2, -2, 0, 0, -1, 17, -15])),
     ('fibonacci.bas', ''.join(format_float(x) for x in [0, 1, 1, 2, 3, 5, 8])),
-    ('for.bas', ''.join(format_float(x) for x in range(0, 11))),
-    ('bubblesort.bas', ''),
+    ('for.bas', ''.join(format_float(x) for x in range(11))),
+    ('bubblesort.bas', ''.join(format_float(x) for x in range(20))),
 ])
 def test_compiler_end_to_end(source_filename, expected_output):
     event_engine = create_event_engine()

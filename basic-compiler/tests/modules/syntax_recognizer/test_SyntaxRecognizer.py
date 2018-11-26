@@ -45,7 +45,7 @@ define dso_local void @program(i8* %target_label) local_unnamed_addr #0 {
   ret void
 }
 define dso_local i32 @main() local_unnamed_addr #1 {
-  musttail call void @program(i8* blockaddress(@program, %label_100)) #0
+  tail call void @program(i8* blockaddress(@program, %label_100)) #0
   ret i32 0
 }
 ''')
@@ -115,11 +115,11 @@ def test_data():
 define dso_local void @program(i8* %target_label) local_unnamed_addr #0 {
   indirectbr i8* %target_label, [ label %label_100 ]
   label_100:
-  musttail call void @exit(i32 0) noreturn nounwind
+  tail call void @exit(i32 0) noreturn #0
   unreachable
 }
 define dso_local i32 @main() local_unnamed_addr #1 {
-  musttail call void @program(i8* blockaddress(@program, %label_100)) #0
+  tail call void @program(i8* blockaddress(@program, %label_100)) #0
   ret i32 0
 }
 declare void @exit(i32) local_unnamed_addr noreturn #0

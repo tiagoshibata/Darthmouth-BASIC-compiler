@@ -208,7 +208,7 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition(('special', '('), 'dim_dimensions'),
             ]),
             'dim_dimensions': State(None, [
-                Transition('number', 'dim_dimension_end', self.ir_generator.lvalue_dimension),
+                Transition('number', 'dim_dimension_end', self.ir_generator.dim_dimension),
             ]),
             'dim_dimension_end': State(None, [
                 Transition(('special', ','), 'dim_dimensions'),

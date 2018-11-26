@@ -78,6 +78,7 @@ class SemanticState:
         self.if_cond_register = None
         self.for_context = []
         self.variable_dimensions = {}
+        self.variable_dimension_queue = []
 
     def uid(self):
         self.uid_count += 1
@@ -196,16 +197,15 @@ class LlvmIrGenerator:
     def variable(self, variable):
         variable = variable.upper()
         self.state.variables.add(variable)
-        self.variable = variable
-        self.variable_dimensions = []
+        self.state.variable_dimension_queue.append((variable, []))
 
     def variable_dimension(self, _):
-        self.variable_dimensions.append(self.state.expression_operand_queue.pop())
+        self.state.variable_dimension_queue[-1][1].append(self.state.expression_operand_queue.pop())
 
     def get_multidimensional_ptr(self, variable, dims):
         variable_dimensions = self.state.variable_dimensions.get(variable, [])
         if len(variable_dimensions) != len(dims):
-            raise SemanticError('Variable dimensions mismatch (expected {}, got {})'.format(variable_dimensions, dims))
+            raise SemanticError('Variable dimensions mismatch for {} (expected {}, got {})'.format(variable, len(variable_dimensions), len(dims)))
         if not variable_dimensions:
             return 'double* @{}, align 8'.format(variable)
         # Multidimensional, convert operands to int and call getelementptr
@@ -226,8 +226,9 @@ class LlvmIrGenerator:
                 index=ptr_index)
 
     def end_of_variable(self, _):
-        ptr = self.get_multidimensional_ptr(self.variable, self.variable_dimensions)
-        register = '%{}_{}'.format(self.variable, self.state.uid())
+        variable, dimensions = self.state.variable_dimension_queue.pop()
+        ptr = self.get_multidimensional_ptr(variable, dimensions)
+        register = '%{}_{}'.format(variable, self.state.uid())
         self.program.append('{} = load double, {}'.format(register, ptr))
         self.state.expression_operand_queue.append(register)
 
@@ -320,8 +321,8 @@ class LlvmIrGenerator:
         self.lvalue = variable
         self.lvalue_dimensions = []
 
-    def lvalue_dimension(self, dimension):
-        self.lvalue_dimensions.append(dimension)
+    def lvalue_dimension(self, _):
+        self.lvalue_dimensions.append(self.state.expression_operand_queue.pop())
 
     def lvalue_end(self, _):
         self.lvalue_ptr = self.get_multidimensional_ptr(self.lvalue, self.lvalue_dimensions)
@@ -343,7 +344,7 @@ class LlvmIrGenerator:
         self.program.append('%i_{} = load i32, i32* @data_index, align 4'.format(i))
         self.program.append(lambda state:
             '%tmp_{i} = getelementptr [{len} x double], [{len} x double]* @DATA, i32 0, i32 %i_{i}'.format(len=len(state.const_data), i=i))
-        self.program.append('%data_value_{i} = load double, double* %tmp_{i}, align 8'.format(i=i))
+        self.program.append('%data_value_{i} = load double, double* %tmp_{i}, align 16'.format(i=i))
         self.program.append('store double %data_value_{}, {}'.format(i, self.lvalue_ptr))
         self.program.append('%i_{i}_inc = add i32 %i_{i}, 1'.format(i=i))
         self.program.append('store i32 %i_{}_inc, i32* @data_index, align 4'.format(i))
@@ -540,6 +541,9 @@ class LlvmIrGenerator:
         self.state.external_symbols.add('llvm.donothing')
         self.program.append('tail call void @llvm.donothing() nounwind readnone')
 
+    def dim_dimension(self, dimension):
+        self.lvalue_dimensions.append(dimension)
+
     def dim_end(self, _):
         self.state.variables.add(self.lvalue)
         self.state.variable_dimensions[self.lvalue] = self.lvalue_dimensions
@@ -598,7 +602,7 @@ class LlvmIrGenerator:
         if self.state.const_data:
             data_array = '[{}]'.format(', '.join('double {}'.format(float(x)) for x in self.state.const_data))
             self.state.private_globals.append('@data_index = internal global i32 0, align 4')
-            self.state.private_globals.append('@DATA = private unnamed_addr constant [{} x double] {}, align 8'.format(len(self.state.const_data), data_array))
+            self.state.private_globals.append('@DATA = private unnamed_addr constant [{} x double] {}, align 16'.format(len(self.state.const_data), data_array))
 
         def declare_variable(var):
             dimensions = self.state.variable_dimensions.get(var)

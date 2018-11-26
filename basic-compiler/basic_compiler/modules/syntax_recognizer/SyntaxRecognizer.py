@@ -219,7 +219,22 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition('end_of_line', 'start'),
             ]),
 
-            'def': State(None),  # TODO
+            'def': State(None, [
+                Transition('identifier', 'def_(', self.ir_generator.def_identifier),
+            ]),
+            'def_(': State(None, [
+                Transition(('special', '('), 'def_parameter'),
+            ]),
+            'def_parameter': State(None, [
+                Transition('variable', 'def_)', self.ir_generator.def_parameter),
+            ]),
+            'def_)': State(None, [
+                Transition(('special', ')'), 'def_exp'),
+            ]),
+            'def_exp': State(None, [
+                Transition(exp_fsm, 'end', self.ir_generator.def_exp),
+            ]),
+
             'gosub': State(None, [
                 Transition('number', 'end', self.ir_generator.gosub),
             ]),

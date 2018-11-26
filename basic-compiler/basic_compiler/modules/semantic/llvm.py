@@ -556,6 +556,15 @@ class LlvmIrGenerator:
         self.state.variables.add(self.lvalue)
         self.state.variable_dimensions[self.lvalue] = self.lvalue_dimensions
 
+    def def_identifier(self, identifier):
+        pass
+
+    def def_parameter(self, variable):
+        pass
+
+    def def_exp(self, exp):
+        pass
+
     def gosub(self, target):
         target = to_int(target)
         self.state.gosub_targets.add(target)

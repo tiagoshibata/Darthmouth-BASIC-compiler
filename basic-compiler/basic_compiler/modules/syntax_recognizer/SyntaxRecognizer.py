@@ -88,10 +88,10 @@ class SyntaxRecognizer(EventDrivenModule):
             ]),
             'let_end_of_dimension': State(None, [
                 Transition(('special', ','), 'let_variable_dimension'),
-                Transition(('special', ')'), 'let_assign', self.ir_generator.lvalue_end),
+                Transition(('special', ')'), 'let_assign'),
             ]),
             'let_assign': State(None, [
-                Transition(('special', '='), 'let_rvalue'),
+                Transition(('special', '='), 'let_rvalue', self.ir_generator.lvalue_end),
             ]),
             'let_rvalue': State(None, [
                 Transition(exp_fsm, 'end', self.ir_generator.let_rvalue),
@@ -102,7 +102,7 @@ class SyntaxRecognizer(EventDrivenModule):
             ]),
             'read_variable_dimensions': State(None, [
                 Transition(('special', '('), 'read_variable_dimension'),
-                Transition(None, 'end_of_read'),
+                Transition(None, 'end_of_read', self.ir_generator.lvalue_end),
             ]),
             'read_variable_dimension': State(None, [
                 Transition(exp_fsm, 'read_end_of_dimension', self.ir_generator.lvalue_dimension),

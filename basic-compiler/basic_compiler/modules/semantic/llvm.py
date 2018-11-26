@@ -202,34 +202,33 @@ class LlvmIrGenerator:
     def variable_dimension(self, _):
         self.variable_dimensions.append(self.state.expression_operand_queue.pop())
 
-    def end_of_variable(self, _):
-        variable = self.variable
-        variable_dimensions = self.state.variable_dimensions.get(self.variable, [])
-        if len(variable_dimensions) != len(self.variable_dimensions):
-            raise SemanticError('Variable dimensions mismatch (expected {}, got {})'.format(variable_dimensions, self.variable_dimensions))
-        register = '%{}_{}'.format(variable, self.state.uid())
+    def get_multidimensional_ptr(self, variable, dims):
+        variable_dimensions = self.state.variable_dimensions.get(variable, [])
+        if len(variable_dimensions) != len(dims):
+            raise SemanticError('Variable dimensions mismatch (expected {}, got {})'.format(variable_dimensions, dims))
         if not variable_dimensions:
-            # Scalar
-            self.program.append('{} = load double, double* @{}, align 8'.format(register, variable))
-        else:
-            # Multidimensional, convert operands to int and call getelementptr
-            prt_index = []
-            for d in self.variable_dimensions:
-                if isinstance(d, float):
-                    # Number literal
-                    prt_index.append(int(d))
-                else:
-                    # Convert expression result to int
-                    register = '%fptoui_{}'.format(self.state.uid())
-                    self.program.append('{} = fptoui double {} to i64'.format(register, d))
-                    prt_index.append(register)
-            prt_index = ', '.join('i64 {}'.format(x) for x in prt_index)
-            self.program.append(
-                '{reg} = load double, double* getelementptr inbounds ({dims}, {dims}* @{var}, {index}), align 16'.format(
-                    reg=register,
-                    dims=dimensions_specifier(variable_dimensions),
-                    var=self.variable,
-                    index=prt_index))
+            return 'double* @{}, align 8'.format(variable)
+        # Multidimensional, convert operands to int and call getelementptr
+        ptr_index = []
+        for d in dims:
+            if isinstance(d, float):
+                # Number literal
+                ptr_index.append(int(d))
+            else:
+                # Convert expression result to int
+                register = '%fptoui_{}'.format(self.state.uid())
+                self.program.append('{} = fptoui double {} to i64'.format(register, d))
+                ptr_index.append(register)
+        ptr_index = ', '.join('i64 {}'.format(x) for x in ptr_index)
+        return 'double* getelementptr inbounds ({dims}, {dims}* @{var}, {index}), align 16'.format(
+                dims=dimensions_specifier(variable_dimensions),
+                var=variable,
+                index=ptr_index)
+
+    def end_of_variable(self, _):
+        ptr = self.get_multidimensional_ptr(self.variable, self.variable_dimensions)
+        register = '%{}_{}'.format(self.variable, self.state.uid())
+        self.program.append('{} = load double, {}'.format(register, ptr))
         self.state.expression_operand_queue.append(register)
 
     def evaluate_expression(self):
@@ -319,20 +318,24 @@ class LlvmIrGenerator:
         variable = variable.upper()
         self.state.variables.add(variable)
         self.lvalue = variable
+        self.lvalue_dimensions = []
 
     def lvalue_dimension(self, dimension):
-        raise NotImplementedError()
+        self.lvalue_dimensions.append(dimension)
 
-    def lvalue_end(self, variable):
-        raise NotImplementedError()
+    def lvalue_end(self, _):
+        self.lvalue_ptr = self.get_multidimensional_ptr(self.lvalue, self.lvalue_dimensions)
 
     def assign_to(self, lvalue):
+        if ',' not in lvalue:
+            # If lvalue is just a variable name, add other qualifiers to make it a pointer
+            lvalue = 'double* @{}, align 8'.format(lvalue)
         result = self.state.expression_operand_queue.pop()
         assert not self.state.expression_operand_queue  # queue should be empty after evaluation
-        self.program.append('store double {}, double* @{}, align 8'.format(result, lvalue))
+        self.program.append('store double {}, {}'.format(result, lvalue))
 
     def let_rvalue(self, _):
-        self.assign_to(self.lvalue)
+        self.assign_to(self.lvalue_ptr)
 
     def read_item(self, _):
         self.state.has_read = True
@@ -341,7 +344,7 @@ class LlvmIrGenerator:
         self.program.append(lambda state:
             '%tmp_{i} = getelementptr [{len} x double], [{len} x double]* @DATA, i32 0, i32 %i_{i}'.format(len=len(state.const_data), i=i))
         self.program.append('%data_value_{i} = load double, double* %tmp_{i}, align 8'.format(i=i))
-        self.program.append('store double %data_value_{}, double* @{}, align 8'.format(i, self.lvalue))
+        self.program.append('store double %data_value_{}, {}'.format(i, self.lvalue_ptr))
         self.program.append('%i_{i}_inc = add i32 %i_{i}, 1'.format(i=i))
         self.program.append('store i32 %i_{}_inc, i32* @data_index, align 4'.format(i))
 

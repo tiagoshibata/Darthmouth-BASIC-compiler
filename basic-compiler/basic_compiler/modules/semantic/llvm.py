@@ -462,7 +462,6 @@ class LlvmIrGenerator:
         self.state.for_context[-1].end = end
 
     def for_step_value(self, value):
-        self.state.expression_operand_queue
         if isinstance(value, float):
             # Implicit 1 step
             step = value
@@ -541,16 +540,9 @@ class LlvmIrGenerator:
         self.state.external_symbols.add('llvm.donothing')
         self.program.append('tail call void @llvm.donothing() nounwind readnone')
 
-    def dim_variable(self, variable):
-        self.dim_variable = variable.upper()
-        self.dim_dimensions = []
-
-    def dim_dimension(self, dimension):
-        self.dim_dimensions.append(dimension)
-
     def dim_end(self, _):
-        self.state.variables.add(self.dim_variable)
-        self.state.variable_dimensions[self.dim_variable] = self.dim_dimensions
+        self.state.variables.add(self.lvalue)
+        self.state.variable_dimensions[self.lvalue] = self.lvalue_dimensions
 
     def gosub(self, target):
         target = to_int(target)
@@ -614,7 +606,7 @@ class LlvmIrGenerator:
                 # Scalar
                 return '@{} = internal global double 0., align 8'.format(var)
 
-            return '@{} = internal global [{} x double] zeroinitializer, align 16'.format(var, dimensions_specifier(dimensions))
+            return '@{} = internal global {} zeroinitializer, align 16'.format(var, dimensions_specifier(dimensions))
 
         header = [
             'source_filename = "{}"'.format(self.state.filename),

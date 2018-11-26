@@ -202,13 +202,13 @@ class SyntaxRecognizer(EventDrivenModule):
             ]),
 
             'dim': State(None, [
-                Transition('variable', 'dim_(', self.ir_generator.dim_variable),
+                Transition('variable', 'dim_(', self.ir_generator.lvalue),
             ]),
             'dim_(': State(None, [
                 Transition(('special', '('), 'dim_dimensions'),
             ]),
             'dim_dimensions': State(None, [
-                Transition('number', 'dim_dimension_end', self.ir_generator.dim_dimension),
+                Transition('number', 'dim_dimension_end', self.ir_generator.lvalue_dimension),
             ]),
             'dim_dimension_end': State(None, [
                 Transition(('special', ','), 'dim_dimensions'),

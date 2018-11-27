@@ -229,7 +229,10 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition('variable', 'def_)', self.ir_generator.def_parameter),
             ]),
             'def_)': State(None, [
-                Transition(('special', ')'), 'def_exp'),
+                Transition(('special', ')'), 'def_='),
+            ]),
+            'def_=': State(None, [
+                Transition(('special', '='), 'def_exp'),
             ]),
             'def_exp': State(None, [
                 Transition(exp_fsm, 'end', self.ir_generator.def_exp),

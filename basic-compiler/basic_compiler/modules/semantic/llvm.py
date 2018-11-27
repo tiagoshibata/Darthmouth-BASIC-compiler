@@ -72,6 +72,7 @@ class SemanticState:
         self.external_symbols = set()
         self.expression_operator_queue = []
         self.expression_operand_queue = []
+        self.expression_variable_table = {}
         self.print_parameters = []
         self.if_left_exp = None
         self.if_cond = None
@@ -237,8 +238,10 @@ class LlvmIrGenerator:
     def end_of_variable(self, _):
         variable, dimensions = self.state.variable_dimension_queue.pop()
         ptr = self.get_multidimensional_ptr(variable, dimensions)
-        register = '%{}_{}'.format(variable, self.state.uid())
-        self.program.append('{} = load double, {}'.format(register, ptr))
+        register = self.state.expression_variable_table.get(variable)
+        if not register:
+            register = '%{}_{}'.format(variable, self.state.uid())
+            self.program.append('{} = load double, {}'.format(register, ptr))
         self.state.expression_operand_queue.append(register)
 
     def evaluate_expression(self):
@@ -278,37 +281,38 @@ class LlvmIrGenerator:
             self.call_function(function)
 
     def call_function(self, function):
-        if function.startswith('FN'):
-            # Call user defined function
-            raise NotImplementedError()
-
-        built_in_to_implementation = {
-            'SIN': 'llvm.sin.f64',
-            'COS': 'llvm.cos.f64',
-            'TAN': 'tan',
-            'ATN': 'atan',
-            'EXP': 'llvm.exp.f64',
-            'ABS': 'llvm.fabs.f64',
-            'LOG': 'llvm.log.f64',
-            'SQR': 'llvm.sqrt.f64',
-            'INT': 'llvm.rint.f64',
-            'RND': 'rand',
-        }
-
-        implementation = built_in_to_implementation.get(function)
-        if not implementation:
-            raise SemanticError('Unknown function identifier: {}'.format(function))
-
-        self.state.external_symbols.add(implementation)
         register = '%{}_{}'.format(function, self.state.uid())
         operand = self.state.expression_operand_queue.pop()
-        if function == 'RND':
-            # Call rand, cast to double and divide by RAND_MAX (platform-specific, 2147483647 on Linux)
-            self.program.append('{}_int = call i32 @rand() #0'.format(register))
-            self.program.append('{r}_double = sitofp i32 {r}_int to double'.format(r=register))
-            self.program.append('{r} = fdiv double {r}_double, 2147483647.'.format(r=register))
+        if function.startswith('FN'):
+            # Call user defined function
+            self.state.referenced_functions.add(function)
+            self.program.append('{} = tail call fast double @{}(double {}) #0'.format(register, function, operand))
         else:
-            self.program.append('{} = tail call fast double @{}(double {}) #0'.format(register, implementation, operand))
+            built_in_to_implementation = {
+                'SIN': 'llvm.sin.f64',
+                'COS': 'llvm.cos.f64',
+                'TAN': 'tan',
+                'ATN': 'atan',
+                'EXP': 'llvm.exp.f64',
+                'ABS': 'llvm.fabs.f64',
+                'LOG': 'llvm.log.f64',
+                'SQR': 'llvm.sqrt.f64',
+                'INT': 'llvm.rint.f64',
+                'RND': 'rand',
+            }
+
+            implementation = built_in_to_implementation.get(function)
+            if not implementation:
+                raise SemanticError('Unknown function identifier: {}'.format(function))
+
+            self.state.external_symbols.add(implementation)
+            if function == 'RND':
+                # Call rand, cast to double and divide by RAND_MAX (platform-specific, 2147483647 on Linux)
+                self.program.append('{}_int = call i32 @rand() #0'.format(register))
+                self.program.append('{r}_double = sitofp i32 {r}_int to double'.format(r=register))
+                self.program.append('{r} = fdiv double {r}_double, 2147483647.'.format(r=register))
+            else:
+                self.program.append('{} = tail call fast double @{}(double {}) #0'.format(register, implementation, operand))
         self.state.expression_operand_queue.append(register)
 
     def operator(self, operator):
@@ -558,13 +562,17 @@ class LlvmIrGenerator:
         self.state.variable_dimensions[self.lvalue_variable] = self.lvalue_dimensions
 
     def def_identifier(self, identifier):
-        pass
+        f = Function(identifier, return_type='double', arguments='double %arg')
+        self.state.functions.append(f)
+        self.program = f
 
     def def_parameter(self, variable):
-        pass
+        self.state.expression_variable_table = {variable.upper(): '%arg'}
 
     def def_exp(self, exp):
-        pass
+        self.state.expression_variable_table = {}
+        self.program.append('ret double {}'.format(self.state.expression_operand_queue.pop()))
+        self.program = self.state.functions[0]
 
     def gosub(self, target):
         target = to_int(target)
@@ -609,10 +617,10 @@ class LlvmIrGenerator:
         return [DECLARATIONS[x] for x in sorted(self.state.external_symbols)]
 
     def to_ll(self):
-        # defined_functions = {x.name for x in self.state.functions}
-        # undefined_functions = self.state.referenced_functions - defined_functions  # TODO remove symbols in external_symbols_declarations
-        # if undefined_functions:
-        #     raise SemanticError('Undefined functions: {}'.format(undefined_functions))
+        defined_functions = {x.name for x in self.state.functions}
+        undefined_functions = self.state.referenced_functions - defined_functions
+        if undefined_functions:
+            raise SemanticError('Undefined functions: {}'.format(undefined_functions))
 
         undefined_labels = (self.state.goto_targets | self.state.gosub_targets) - self.state.defined_labels
         if undefined_labels:

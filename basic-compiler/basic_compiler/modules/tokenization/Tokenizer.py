@@ -3,6 +3,7 @@ from basic_compiler.modules.EventDrivenModule import EventDrivenModule
 
 TRANSITION_TABLE = {
     'start': State(None, [
+        Transition(('ascii_character', 'R'), 'possible_remark_E'),
         Transition('ascii_character', 'variable'),
         Transition('ascii_digit', 'number'),
         Transition('ascii_delimiter', 'delimiter'),
@@ -13,6 +14,26 @@ TRANSITION_TABLE = {
         Transition(('ascii_special', '<'), 'smaller_than'),
         Transition('ascii_special', 'special'),
         Transition('eof', 'eof'),
+    ]),
+
+    'possible_remark_E': State(None, [
+        Transition(('ascii_character', 'E'), 'possible_remark_M'),
+        Transition('ascii_character', 'identifier'),
+        Transition('ascii_number', 'variable_with_number'),
+    ]),
+    'possible_remark_M': State(None, [
+        Transition(('ascii_character', 'M'), 'possible_remark_space'),
+        Transition('ascii_character', 'identifier'),
+    ]),
+    'possible_remark_space': State(None, [
+        Transition('ascii_delimiter', 'remark'),
+        Transition('ascii_character', 'identifier'),
+    ]),
+    'remark': State('remark', [
+        Transition('ascii_character', 'remark'),
+        Transition('ascii_digit', 'remark'),
+        Transition('ascii_delimiter', 'remark'),
+        Transition('ascii_special', 'remark'),
     ]),
 
     'variable': State('variable', [

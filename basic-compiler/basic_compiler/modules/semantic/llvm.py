@@ -583,11 +583,7 @@ class LlvmIrGenerator:
         self.program.append('ret void')
 
     def remark(self, text):
-        self.state.remark.append(text)
-
-    def remark_end(self, text):
-        self.program.append('; {}'.format(' '.join(self.state.remark)))
-        self.state.remark = []
+        self.program.append(';{}'.format(text[3:]))
 
     def end(self, event):
         self.state.external_symbols.add('exit')

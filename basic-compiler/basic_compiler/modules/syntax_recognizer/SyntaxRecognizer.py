@@ -54,6 +54,7 @@ class SyntaxRecognizer(EventDrivenModule):
 
         self.fsm = Fsm({
             'start': State(None, [
+                Transition('end_of_line', 'start'),
                 Transition('number', 'statement', self.ir_generator.label),
                 Transition('eof', 'eof', lambda _: print(self.ir_generator.to_ll())),
             ]),
@@ -72,7 +73,7 @@ class SyntaxRecognizer(EventDrivenModule):
                 Transition(('identifier', 'DEF'), 'def'),
                 Transition(('identifier', 'GOSUB'), 'gosub'),
                 Transition(('identifier', 'RETURN'), 'end', self.ir_generator.return_statement),
-                Transition(('identifier', 'REM'), 'remark'),
+                Transition('remark', 'end', self.ir_generator.remark),
                 Transition(('identifier', 'END'), 'end', self.ir_generator.end),
             ]),
 
@@ -241,14 +242,6 @@ class SyntaxRecognizer(EventDrivenModule):
             'gosub': State(None, [
                 Transition('number', 'end', self.ir_generator.gosub),
             ]),
-            'remark': State(None, [
-                Transition('identifier', 'remark', self.ir_generator.remark),
-                Transition('number', 'remark', self.ir_generator.remark),
-                Transition('special', 'remark', self.ir_generator.remark),
-                Transition('string', 'remark', self.ir_generator.remark),
-                Transition('variable', 'remark', self.ir_generator.remark),
-                Transition('end_of_line', 'start', self.ir_generator.remark_end),
-            ]),
             'end': State(None, [
                 Transition('end_of_line', 'start'),
             ]),
@@ -263,6 +256,6 @@ class SyntaxRecognizer(EventDrivenModule):
             'open': self.open_handler,
             **{
                 x: self.transition_on_event(x)
-                for x in ('end_of_line', 'identifier', 'number', 'special', 'string', 'variable', 'eof')
+                for x in ('end_of_line', 'identifier', 'number', 'remark', 'special', 'string', 'variable', 'eof')
             },
         }

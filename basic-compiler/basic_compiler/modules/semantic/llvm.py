@@ -43,7 +43,7 @@ class Function:
         return '\n'.join((
             'define dso_local {} @{}({}) local_unnamed_addr {} {{'.format(self.return_type, self.name, self.arguments, self.attributes),
             '\n'.join(('  {}'.format(x) for x in instructions)),
-            '}\n',
+            '}',
         ))
 
 # Text common to all generated LLVM IR files
@@ -641,15 +641,15 @@ class LlvmIrGenerator:
 
         header = [
             'source_filename = "{}"'.format(self.state.filename),
-            *(x for x in sorted(self.state.private_globals)),
-            *(declare_variable(x) for x in sorted(self.state.variables)),
+            '\n'.join((x for x in sorted(self.state.private_globals))),
+            '\n'.join((declare_variable(x) for x in sorted(self.state.variables))),
         ]
 
         body = [x.to_ll(self.state) for x in self.state.functions]
 
-        return '\n'.join((
+        return '\n\n'.join((x for x in (
             *header,
             *body,
-            *self.external_symbols_declarations(),
+            '\n'.join(self.external_symbols_declarations()),
             LLVM_TAIL,
-        ))
+        ) if x))

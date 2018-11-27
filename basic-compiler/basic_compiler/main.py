@@ -15,7 +15,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='BASIC to LLVM IR compiler.')
     parser.add_argument('--opt', action='store_true', help='call optimizer on generated code')
     parser.add_argument('--lli', action='store_true', help='run generated code with lli')
-    parser.add_argument('--bin', action='store_true', help='call assembler and linker to output a binary')
+    parser.add_argument('--bin', help='call assembler and linker to output a binary')
     parser.add_argument('source', type=Path, help='source file')
     return parser.parse_args()
 
@@ -49,7 +49,7 @@ def main(args):
         output = output_optimized
 
     if args.bin:
-        subprocess.run(['clang', '-Ofast', output], check=True)
+        subprocess.run(['clang', '-Ofast', output, '-o', args.bin, '-lm'], check=True)
 
     if args.lli:
         subprocess.run(['lli', output], check=True)

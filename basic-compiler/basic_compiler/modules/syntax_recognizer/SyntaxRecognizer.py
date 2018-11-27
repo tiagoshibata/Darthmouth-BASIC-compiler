@@ -141,11 +141,12 @@ class SyntaxRecognizer(EventDrivenModule):
             'print_after_string': State(None, [
                 Transition(('special', ','), 'print_after_comma'),
                 Transition('end_of_line', 'start', self.ir_generator.print_end_with_newline),
-                Transition(exp_fsm, 'print_exp_result', self.ir_generator.print_expression_result),
+                Transition(exp_fsm, 'print_after_exp', self.ir_generator.print_expression_result),
             ]),
             'print_after_comma': State(None, [
                 Transition('end_of_line', 'start', self.ir_generator.print_end),
-                Transition(exp_fsm, 'print_exp_result'),
+                Transition('string', 'print_after_string', self.ir_generator.print),
+                Transition(exp_fsm, 'print_after_exp', self.ir_generator.print_expression_result),
             ]),
             'print_after_exp': State(None, [
                 Transition(('special', ','), 'print_after_comma'),

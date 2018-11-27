@@ -270,7 +270,6 @@ class LlvmIrGenerator:
         # Evaluate until start of scope ("(" or start of expression)
         while self.state.expression_operator_queue:
             if self.state.expression_operator_queue[-1] == '(':
-                self.state.expression_operator_queue.pop()
                 return
             self.evaluate_expression()
 
@@ -327,6 +326,8 @@ class LlvmIrGenerator:
     def end_expression(self, _):
         # Pop queued operators until '(' or start of expression is found
         self.evaluate_scope()
+        if self.state.expression_operator_queue:
+            self.state.expression_operator_queue.pop()
 
     def lvalue(self, variable):
         variable = variable.upper()

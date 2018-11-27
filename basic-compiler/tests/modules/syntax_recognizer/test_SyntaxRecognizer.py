@@ -85,7 +85,19 @@ def test_duplicate_label():
     syntax_recognizer.handle_event(('end_of_line', '\n'))
     syntax_recognizer.handle_event(('eof', None))
 
-# TODO test undefined functions
+
+@pytest.mark.xfail(raises=SemanticError)
+def test_duplicate_label():
+    syntax_recognizer = SyntaxRecognizer(None)
+    syntax_recognizer.handle_event(('open', 'source.bas'))
+    syntax_recognizer.handle_event(('number', '100'))
+    syntax_recognizer.handle_event(('identifier', 'print'))
+    syntax_recognizer.handle_event(('identifier', 'FNX'))
+    syntax_recognizer.handle_event(('special', '('))
+    syntax_recognizer.handle_event(('variable', 'x'))
+    syntax_recognizer.handle_event(('special', ')'))
+    syntax_recognizer.handle_event(('end_of_line', '\n'))
+    syntax_recognizer.handle_event(('eof', None))
 
 
 def test_data():

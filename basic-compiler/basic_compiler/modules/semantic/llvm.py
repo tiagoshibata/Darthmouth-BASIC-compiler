@@ -327,14 +327,14 @@ class LlvmIrGenerator:
     def lvalue(self, variable):
         variable = variable.upper()
         self.state.variables.add(variable)
-        self.lvalue = variable
+        self.lvalue_variable = variable
         self.lvalue_dimensions = []
 
     def lvalue_dimension(self, _):
         self.lvalue_dimensions.append(self.state.expression_operand_queue.pop())
 
     def lvalue_end(self, _):
-        self.lvalue_ptr = self.get_multidimensional_ptr(self.lvalue, self.lvalue_dimensions)
+        self.lvalue_ptr = self.get_multidimensional_ptr(self.lvalue_variable, self.lvalue_dimensions)
 
     def assign_to(self, lvalue):
         if ',' not in lvalue:
@@ -542,8 +542,9 @@ class LlvmIrGenerator:
             # step < 0
             self.program.append('{}:'.format(negative))
             # If new_value >= end, jump to loop, else continue execution
-            self.program.append('%{} = fcmp oge double %{}, {}'.format(will_jump, new_value, end_value))
-            self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
+            will_jump_2 = 'will_jump_2_{}'.format(self.state.uid())
+            self.program.append('%{} = fcmp oge double %{}, {}'.format(will_jump_2, new_value, end_value))
+            self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump_2, label, for_exit))
         # Exit of for loop
         self.program.append('{}:'.format(for_exit))
         self.state.external_symbols.add('llvm.donothing')
@@ -553,8 +554,8 @@ class LlvmIrGenerator:
         self.lvalue_dimensions.append(dimension)
 
     def dim_end(self, _):
-        self.state.variables.add(self.lvalue)
-        self.state.variable_dimensions[self.lvalue] = self.lvalue_dimensions
+        self.state.variables.add(self.lvalue_variable)
+        self.state.variable_dimensions[self.lvalue_variable] = self.lvalue_dimensions
 
     def def_identifier(self, identifier):
         pass

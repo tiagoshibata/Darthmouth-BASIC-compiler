@@ -249,7 +249,7 @@ class LlvmIrGenerator:
             register = self.negate(self.state.expression_operand_queue.pop())
         else:
             operator = self.state.expression_operator_queue.pop()
-            operand, operand_2 = self.state.expression_operand_queue.pop(), self.state.expression_operand_queue.pop()
+            operand_2, operand = self.state.expression_operand_queue.pop(), self.state.expression_operand_queue.pop()
             if operator == '↑':
                 self.state.external_symbols.add('llvm.pow.f64')
                 register = '%pow_{}'.format(self.state.uid())
@@ -640,7 +640,7 @@ class LlvmIrGenerator:
             return '@{} = internal global {} zeroinitializer, align 16'.format(var, dimensions_specifier(dimensions))
 
         header = [
-            'source_filename = "{}"'.format(self.state.filename),
+            'source_filename = "{}"\ntarget triple = "x86_64-pc-linux-gnu"'.format(self.state.filename),
             '\n'.join((x for x in sorted(self.state.private_globals))),
             '\n'.join((declare_variable(x) for x in sorted(self.state.variables))),
         ]

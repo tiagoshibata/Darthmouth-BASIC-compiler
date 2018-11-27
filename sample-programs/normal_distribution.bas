@@ -1,6 +1,6 @@
 10 REM Taken from https://www.dartmouth.edu/basicfifty/commands.html
 100 REM PLOT A NORMAL DISTRIBUTION CURVE
-120 DEF FNN(X) = EXP(-(X^2/2))/SQR(2*3.14159265)
+120 DEF FNN(X) = EXP(-(X↑2/2))/SQR(2*3.14159265)
 140 FOR X = -2 TO 2 STEP .1
 150 LET Y = FNN(X)
 160 LET Y = INT(100*Y)

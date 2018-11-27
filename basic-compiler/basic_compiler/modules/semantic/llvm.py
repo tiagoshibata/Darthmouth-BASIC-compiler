@@ -42,7 +42,7 @@ class Function:
             instructions.append('unreachable')
         return '\n'.join((
             'define dso_local {} @{}({}) local_unnamed_addr {} {{'.format(self.return_type, self.name, self.arguments, self.attributes),
-            '\n'.join(('  {}'.format(x) for x in instructions)),
+            '\n'.join((('  {}'.format(x) if x[-1] != ':' else x) for x in instructions)),
             '}',
         ))
 

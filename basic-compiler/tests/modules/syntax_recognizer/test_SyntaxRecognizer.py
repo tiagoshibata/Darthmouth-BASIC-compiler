@@ -41,7 +41,7 @@ def test_minimal_program():
     assert_source_matches(s,  '''source_filename = "source.bas"
 define dso_local void @program(i8* %target_label) local_unnamed_addr #0 {
   indirectbr i8* %target_label, [ label %label_100 ]
-  label_100:
+label_100:
   ret void
 }
 define dso_local i32 @main() local_unnamed_addr #1 {
@@ -126,7 +126,7 @@ def test_data():
 @data_index = internal global i32 0, align 4
 define dso_local void @program(i8* %target_label) local_unnamed_addr #0 {
   indirectbr i8* %target_label, [ label %label_100 ]
-  label_100:
+label_100:
   tail call void @exit(i32 0) noreturn #0
   unreachable
 }

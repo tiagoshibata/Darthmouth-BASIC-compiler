@@ -50,7 +50,7 @@ class Exp:
     def variable_dimension(self):
         self.variable_dimension_queue[-1][1].append(self.state.exp_result)
 
-    def end_of_variable(self, _):
+    def end_of_variable(self):
         variable, dimensions = self.variable_dimension_queue.pop()
         ptr = llvm.get_multidimensional_ptr(self.state, variable, dimensions)
         register = self.state.loaded_variables.get(variable)

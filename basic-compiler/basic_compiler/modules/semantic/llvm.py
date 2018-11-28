@@ -2,6 +2,7 @@ import os
 
 from basic_compiler.modules.semantic.Exp import Exp
 from basic_compiler.modules.semantic.For import For
+from basic_compiler.modules.semantic.If import If
 from basic_compiler.modules.semantic.Print import Print
 from basic_compiler.modules.semantic.functions import Function, LLVM_TAIL, Main, Program
 
@@ -110,6 +111,7 @@ class LlvmIrGenerator:
         self.state.current_function = Program()
         self.state.functions.extend((self.state.current_function, Main()))
         self.exp = Exp(self.state)
+        self.if_statement = If(self.state)
         self.for_statement = For(self.state)
         self.print = Print(self.state)
 
@@ -134,16 +136,16 @@ class LlvmIrGenerator:
         self.lvalue_variable = variable
         self.lvalue_dimensions = []
 
-    def lvalue_dimension(self, _):
+    def lvalue_dimension(self):
         self.lvalue_dimensions.append(self.state.exp_result)
 
-    def lvalue_end(self, _):
+    def lvalue_end(self):
         self.lvalue_ptr = get_multidimensional_ptr(self.state, self.lvalue_variable, self.lvalue_dimensions)
 
-    def let_rvalue(self, _):
+    def let_rvalue(self):
         assign_to(self.state, self.lvalue_ptr)
 
-    def read_item(self, _):
+    def read_item(self):
         self.state.has_read = True
         i = self.state.uid()
         self.state.append_instruction('%i_{} = load i32, i32* @data_index, align 4'.format(i))
@@ -165,38 +167,10 @@ class LlvmIrGenerator:
         self.state.goto_targets.add(target)
         self.state.append_instruction('br label %label_{}'.format(target))
 
-    def if_left_exp(self, _):
-        self.state.if_left_exp = self.state.exp_result
-
-    def if_operator(self, operator):
-        operator_to_cond = {
-            '=': 'oeq',
-            '>': 'ogt',
-            '>=': 'oge',
-            '<': 'olt',
-            '<=': 'ole',
-            '<>': 'one',
-        }
-        cond = operator_to_cond.get(operator)
-        if not cond:
-            raise SemanticError('Unknown operator: {}'.format(operator))
-        self.state.if_cond = cond
-
-    def if_right_exp(self, _):
-        self.state.if_cond_register = '%cond_{}'.format(self.state.uid())
-        self.state.append_instruction('{} = fcmp {} double {}, {}'.format(self.state.if_cond_register, self.state.if_cond, self.state.if_left_exp, self.state.exp_result))
-
-    def if_target(self, target):
-        target = to_int(target)
-        self.state.goto_targets.add(target)
-        if_unequal = 'cond_false_{}'.format(self.state.uid())
-        self.state.append_instruction('br i1 {}, label %label_{}, label %{}'.format(self.state.if_cond_register, target, if_unequal))
-        self.state.append_instruction('{}:'.format(if_unequal))
-
     def dim_dimension(self, dimension):
         self.lvalue_dimensions.append(dimension)
 
-    def dim_end(self, _):
+    def dim_end(self):
         self.state.variables.add(self.lvalue_variable)
         self.state.variable_dimensions[self.lvalue_variable] = self.lvalue_dimensions
 

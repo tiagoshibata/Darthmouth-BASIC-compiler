@@ -165,19 +165,19 @@ class SyntaxRecognizer(EventDrivenModule):
             ]),
 
             'if': State(None, [
-                Transition(exp_fsm, 'if_operator', self.ir_generator.if_left_exp),
+                Transition(exp_fsm, 'if_operator', self.ir_generator.if_statement.left_exp),
             ]),
             'if_operator': State(None, [
-                Transition('special', 'if_right_exp', self.ir_generator.if_operator),
+                Transition('special', 'if_right_exp', self.ir_generator.if_statement.operator),
             ]),
             'if_right_exp': State(None, [
-                Transition(exp_fsm, 'if_then', self.ir_generator.if_right_exp),
+                Transition(exp_fsm, 'if_then', self.ir_generator.if_statement.right_exp),
             ]),
             'if_then': State(None, [
                 Transition(('identifier', 'THEN'), 'if_target'),
             ]),
             'if_target': State(None, [
-                Transition('number', 'end', self.ir_generator.if_target),
+                Transition('number', 'end', self.ir_generator.if_statement.target),
             ]),
 
             'for': State(None, [

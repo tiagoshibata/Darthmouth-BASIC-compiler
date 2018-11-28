@@ -50,5 +50,5 @@ class Print:
             ))
         self.state.print_parameters = []
 
-    def end_with_newline(self, _):
-        self.end(_, suffix='\\0A')
+    def end_with_newline(self):
+        self.end(None, suffix='\\0A')

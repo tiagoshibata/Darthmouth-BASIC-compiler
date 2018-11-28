@@ -552,8 +552,6 @@ class LlvmIrGenerator:
             self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump_2, label, for_exit))
         # Exit of for loop
         self.program.append('{}:'.format(for_exit))
-        self.state.external_symbols.add('llvm.donothing')
-        self.program.append('tail call void @llvm.donothing() readnone #0')
 
     def dim_dimension(self, dimension):
         self.lvalue_dimensions.append(dimension)
@@ -596,7 +594,6 @@ class LlvmIrGenerator:
             'exit': 'declare void @exit(i32) local_unnamed_addr noreturn #0',
             'printf': 'declare i32 @printf(i8* nocapture readonly, ...) local_unnamed_addr #0',
             'putchar': 'declare i32 @putchar(i32) local_unnamed_addr #0',
-            'llvm.donothing': 'declare void @llvm.donothing() local_unnamed_addr readnone #0',
 
             # Language built-ins
             'llvm.sin.f64': 'declare double @llvm.sin.f64(double) local_unnamed_addr #0',

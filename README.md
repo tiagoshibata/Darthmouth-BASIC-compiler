@@ -129,7 +129,6 @@ label_180:
   %will_jump_16 = fcmp ole double %new_Z_14, %end_Z_15
   br i1 %will_jump_16, label %label_180, label %for_exit_17
 for_exit_17:
-  tail call void @llvm.donothing() readnone #0
   tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([4 x i8], [4 x i8]* @.str4, i32 0, i32 0), i8* getelementptr inbounds ([2 x i8], [2 x i8]* @.str3, i32 0, i32 0)) #0
   %X_18 = load double, double* @X, align 8
   %new_X_19 = fadd fast double %X_18, 0.1
@@ -137,7 +136,6 @@ for_exit_17:
   %will_jump_20 = fcmp ole double %new_X_19, 2.0
   br i1 %will_jump_20, label %label_150, label %for_exit_21
 for_exit_21:
-  tail call void @llvm.donothing() readnone #0
   tail call void @exit(i32 0) noreturn #0
   unreachable
 }
@@ -159,7 +157,6 @@ define dso_local double @FNN(double %arg) local_unnamed_addr #0 {
 }
 
 declare void @exit(i32) local_unnamed_addr noreturn #0
-declare void @llvm.donothing() local_unnamed_addr readnone #0
 declare double @llvm.exp.f64(double) local_unnamed_addr #0
 declare double @llvm.pow.f64(double, double) local_unnamed_addr #0
 declare double @llvm.rint.f64(double) local_unnamed_addr #0

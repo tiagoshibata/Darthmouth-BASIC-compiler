@@ -61,6 +61,7 @@ def format_float(n):
     ('bubblesort.bas', ''.join(format_float(x) for x in range(20))),
     ('eratosthenes_sieve.bas', ''.join(format_float(x) for x in [2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37])),
     ('def.bas', ''.join(format_float(x) for x in (math.cos(y / 10) * math.exp(-y / 10) for y in range(0, 101, 1)))),
+    ('gosub.bas', 'Start\nSubroutine\nMiddle\nSubroutine\nEnd\n'),
 ])
 def test_compiler_end_to_end(source_filename, expected_output):
     event_engine = create_event_engine()

@@ -3,6 +3,10 @@ from basic_compiler.modules.EventDrivenModule import EventDrivenModule
 from basic_compiler.modules.semantic.llvm import LlvmIrGenerator
 
 
+class CompilerSyntaxError(RuntimeError):
+    pass
+
+
 class SyntaxRecognizer(EventDrivenModule):
     def open_handler(self, event):
         self.ir_generator = LlvmIrGenerator(event[0])
@@ -10,44 +14,44 @@ class SyntaxRecognizer(EventDrivenModule):
         exp_fsm.states = {
             'start': State(None, [
                 Transition(('special', '+'), 'start'),
-                Transition(('special', '-'), 'start', self.ir_generator.negative_expression),
+                Transition(('special', '-'), 'start', self.ir_generator.exp.negative_expression),
                 Transition(None, 'start_expression'),
             ]),
             'start_expression': State(None, [
-                Transition(('special', '('), 'nested_expression', self.ir_generator.operator),
-                Transition('number', 'end_expression', self.ir_generator.number),
-                Transition('variable', 'end_of_variable', self.ir_generator.variable),
-                Transition('identifier', 'function_call', self.ir_generator.operator),
+                Transition(('special', '('), 'nested_expression', self.ir_generator.exp.operator),
+                Transition('number', 'end_expression', self.ir_generator.exp.number),
+                Transition('variable', 'end_of_variable', self.ir_generator.exp.variable),
+                Transition('identifier', 'function_call', self.ir_generator.exp.operator),
             ]),
             'nested_expression': State(None, [
-                Transition(exp_fsm, 'end_of_nested_expression', self.ir_generator.end_nested_expression),
+                Transition(exp_fsm, 'end_of_nested_expression', self.ir_generator.exp.end_nested_expression),
             ]),
 
             'end_of_variable': State(None, [
                 Transition(('special', '('), 'variable_dimension'),
-                Transition(None, 'end_expression', self.ir_generator.end_of_variable),
+                Transition(None, 'end_expression', self.ir_generator.exp.end_of_variable),
             ]),
             'variable_dimension': State(None, [
-                Transition(exp_fsm, 'end_of_dimension', self.ir_generator.variable_dimension),
+                Transition(exp_fsm, 'end_of_dimension', self.ir_generator.exp.variable_dimension),
             ]),
             'end_of_dimension': State(None, [
                 Transition(('special', ','), 'variable_dimension'),
-                Transition(('special', ')'), 'end_expression', self.ir_generator.end_of_variable),
+                Transition(('special', ')'), 'end_expression', self.ir_generator.exp.end_of_variable),
             ]),
 
             'end_of_nested_expression': State(None, [
                 Transition(('special', ')'), 'end_expression'),
             ]),
             'function_call': State(None, [
-                Transition(('special', '('), 'nested_expression', self.ir_generator.operator),
+                Transition(('special', '('), 'nested_expression', self.ir_generator.exp.operator),
             ]),
             'end_expression': State(None, [
-                Transition(('special', '+'), 'start_expression', self.ir_generator.operator),
-                Transition(('special', '-'), 'start_expression', self.ir_generator.operator),
-                Transition(('special', '*'), 'start_expression', self.ir_generator.operator),
-                Transition(('special', '/'), 'start_expression', self.ir_generator.operator),
-                Transition(('special', '↑'), 'start_expression', self.ir_generator.operator),
-                Transition(None, 'accept', self.ir_generator.end_expression),
+                Transition(('special', '+'), 'start_expression', self.ir_generator.exp.operator),
+                Transition(('special', '-'), 'start_expression', self.ir_generator.exp.operator),
+                Transition(('special', '*'), 'start_expression', self.ir_generator.exp.operator),
+                Transition(('special', '/'), 'start_expression', self.ir_generator.exp.operator),
+                Transition(('special', '↑'), 'start_expression', self.ir_generator.exp.operator),
+                Transition(None, 'accept', self.ir_generator.exp.end_expression),
             ]),
             'accept': State(True)
         }
@@ -177,30 +181,30 @@ class SyntaxRecognizer(EventDrivenModule):
             ]),
 
             'for': State(None, [
-                Transition('variable', 'for_=', self.ir_generator.for_variable),
+                Transition('variable', 'for_=', self.ir_generator.for_statement.variable),
             ]),
             'for_=': State(None, [
                 Transition(('special', '='), 'for_left_exp'),
             ]),
             'for_left_exp': State(None, [
-                Transition(exp_fsm, 'for_to', self.ir_generator.for_left_exp),
+                Transition(exp_fsm, 'for_to', self.ir_generator.for_statement.left_exp),
             ]),
             'for_to': State(None, [
                 Transition(('identifier', 'TO'), 'for_right_exp'),
             ]),
             'for_right_exp': State(None, [
-                Transition(exp_fsm, 'for_step', self.ir_generator.for_right_exp),
+                Transition(exp_fsm, 'for_step', self.ir_generator.for_statement.right_exp),
             ]),
             'for_step': State(None, [
                 Transition(('identifier', 'STEP'), 'for_step_value'),
-                Transition('end_of_line', 'start', lambda _: self.ir_generator.for_step_value(1.)),
+                Transition('end_of_line', 'start', lambda _: self.ir_generator.for_statement.step_value(1.)),
             ]),
             'for_step_value': State(None, [
-                Transition(exp_fsm, 'end', self.ir_generator.for_step_value),
+                Transition(exp_fsm, 'end', self.ir_generator.for_statement.step_value),
             ]),
 
             'next': State(None, [
-                Transition('variable', 'end', self.ir_generator.next),
+                Transition('variable', 'end', self.ir_generator.for_statement.next),
             ]),
 
             'dim': State(None, [

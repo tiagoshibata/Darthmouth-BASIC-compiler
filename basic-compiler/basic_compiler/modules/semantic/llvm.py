@@ -1,5 +1,9 @@
 import os
 
+from basic_compiler.modules.semantic.Exp import Exp
+from basic_compiler.modules.semantic.For import For
+from basic_compiler.modules.semantic.functions import Function, LLVM_TAIL, Main, Program
+
 
 class SemanticError(RuntimeError):
     pass
@@ -13,52 +17,12 @@ def is_block_terminator(instruction):
         'ret', 'br', 'switch', 'indirectbr', 'invoke', 'resume', 'catchswitch', 'catchret', 'cleanupret', 'unreachable')
 
 
-class Function:
-    def __init__(self, name, return_type='void', arguments='', attributes='#0'):
-        self.return_type = return_type
-        self.name = name
-        self.arguments = arguments
-        self.attributes = attributes
-        self.instructions = []
-
-    def append(self, instruction):
-        self.instructions.append(instruction)
-
-    def to_ll(self, final_semantic_state):
-        def evaluate(instruction):
-            if isinstance(instruction, str):
-                return instruction
-            return instruction(final_semantic_state)
-
-        instructions = [evaluate(x) for x in self.instructions]
-        instructions = [x for x in instructions if x]  # remove instructions that became empty
-        if not instructions:
-            # Function bodies with no basic blocks are invalid, so return nothing instead of an empty function
-            return "; {} @{}({}) omitted because it's empty".format(self.return_type, self.name, self.arguments)
-        if not is_block_terminator(instructions[-1]):
-            # Add a terminator if the body doesn't end with one
-            final_semantic_state.external_symbols.add('exit')
-            instructions.append('tail call void @exit(i32 0) noreturn #0')
-            instructions.append('unreachable')
-        return '\n'.join((
-            'define dso_local {} @{}({}) local_unnamed_addr {} {{'.format(self.return_type, self.name, self.arguments, self.attributes),
-            '\n'.join((('  {}'.format(x) if x[-1] != ':' else x) for x in instructions)),
-            '}',
-        ))
-
-# Text common to all generated LLVM IR files
-LLVM_TAIL = '''attributes #0 = { nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
-attributes #1 = { norecurse nounwind "correctly-rounded-divide-sqrt-fp-math"="false" "disable-tail-calls"="false" "less-precise-fpmad"="false" "no-frame-pointer-elim"="false" "no-infs-fp-math"="true" "no-jump-tables"="false" "no-nans-fp-math"="true" "no-signed-zeros-fp-math"="true" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+fxsr,+mmx,+sse,+sse2,+x87" "unsafe-fp-math"="true" "use-soft-float"="false" }
-
-!llvm.ident = !{!0}
-!0 = !{!"BASIC to LLVM IR compiler (https://github.com/tiagoshibata/pcs3866-compilers)"}
-'''
-
-
 class SemanticState:
     def __init__(self, filename):
         self.filename = filename
+        self.exp_result = None
         self.functions = []
+        self.current_function = None
         self.referenced_functions = set()
         self.entry_point = None
         self.defined_labels = set()
@@ -70,47 +34,21 @@ class SemanticState:
         self.variables = set()
         self.private_globals = []
         self.external_symbols = set()
-        self.expression_operator_queue = []
-        self.expression_operand_queue = []
-        self.expression_variable_table = {}
+        self.loaded_variables = {}
         self.print_parameters = []
         self.if_left_exp = None
         self.if_cond = None
         self.if_cond_register = None
         self.for_context = []
         self.variable_dimensions = {}
-        self.variable_dimension_queue = []
         self.remark = []
 
     def uid(self):
         self.uid_count += 1
         return self.uid_count
 
-
-class Main(Function):
-    def __init__(self):
-        super().__init__('main', return_type='i32', attributes='#1')
-        self.append(lambda state:
-            ('tail call void @program(i8* blockaddress(@program, %label_{})) #0'.format(state.entry_point) if state.entry_point else None))
-        self.append('ret i32 0')
-
-
-class Program(Function):
-    def __init__(self):
-        super().__init__('program', arguments='i8* %target_label', attributes='#0')
-
-        def indirect_branch(state):
-            if state.defined_labels:
-                # If the program is not empty, the entry point is called by main
-                gosub_targets = state.gosub_targets | {state.entry_point}
-            else:
-                gosub_targets = state.gosub_targets
-            if not gosub_targets:
-                return None
-            call_label_list = ', '.join(('label %label_{}'.format(x) for x in gosub_targets))
-            return 'indirectbr i8* %target_label, [ {} ]'.format(call_label_list)
-
-        self.append(indirect_branch)
+    def append_instruction(self, instruction):
+        self.current_function.append(instruction)
 
 
 def to_int(identifier):
@@ -120,92 +58,14 @@ def to_int(identifier):
         raise SemanticError('Not a valid int: {}'.format(identifier))
 
 
-def to_double(number):
-    try:
-        return float(number)
-    except ValueError:
-        raise SemanticError('Not a valid double: {}'.format(number))
-
-
 def dimensions_specifier(dimensions):
     if not len(dimensions):
         return 'double'
     return '[{} x {}]'.format(dimensions[0], dimensions_specifier(dimensions[1:]))
 
 
-def operator_priority(operator):
-    # Functions have lower priority than "(", but higher than "n"
-    if len(operator) == 3:
-        return 4
-    # 'n' represents the negative sign leading an expression (unary -)
-    PRIORITY = [('+', '-'), ('*', '/'), ('↑',), ('n',), ('function',), ('(',)]
-    priority = next((i for i, x in enumerate(PRIORITY) if operator in x), None)
-    if priority is None:
-        raise SemanticError('Operator not implemented: {}'.format(operator))
-    return priority
-
-
-class ForContext:
-    def __init__(self, variable):
-        self.variable = variable
-        self.end = None
-        self.step = None
-        self.identifier = None
-
-
-class LlvmIrGenerator:
-    def __init__(self, filename):
-        self.state = SemanticState(os.path.basename(filename))
-        self.program = Program()
-        self.state.functions.extend((self.program, Main()))
-
-    def label(self, identifier):
-        identifier = to_int(identifier)
-        if identifier in self.state.defined_labels:
-            raise SemanticError('Duplicate label {}'.format(identifier))
-        label = 'label_{}'.format(identifier)
-        if not self.state.entry_point:
-            # First label is the entry point
-            self.state.entry_point = identifier
-        if self.state.for_context and not self.state.for_context[-1].identifier:
-            self.state.for_context[-1].identifier = identifier
-        self.state.defined_labels.add(identifier)
-        if not is_block_terminator(self.program.instructions[-1]):
-            self.program.append(lambda state: ('br label %{}'.format(label) if identifier in state.goto_targets | state.gosub_targets else None))
-        self.program.append(lambda state: ('{}:'.format(label) if identifier in state.goto_targets | state.gosub_targets | {state.entry_point} else None))
-
-    def negative_expression(self, _):
-        if not self.is_unary_negative():
-            self.state.expression_operator_queue.append('n')
-
-    def is_unary_negative(self):
-        if self.state.expression_operator_queue and self.state.expression_operator_queue[-1] == 'n':
-            self.state.expression_operator_queue.pop()
-            return True
-        return False
-
-    def number(self, number):
-        number = to_double(number)
-        # Negate the result if a unary negative precedes it
-        if self.is_unary_negative():
-            number = -number
-        self.state.expression_operand_queue.append(number)
-
-    def negate(self, register):
-        negated = '{}_neg'.format(register)
-        self.program.append('{} = fsub fast double 0., {}'.format(negated, register))
-        return negated
-
-    def variable(self, variable):
-        variable = variable.upper()
-        self.state.variables.add(variable)
-        self.state.variable_dimension_queue.append((variable, []))
-
-    def variable_dimension(self, _):
-        self.state.variable_dimension_queue[-1][1].append(self.state.expression_operand_queue.pop())
-
-    def get_multidimensional_ptr(self, variable, dims):
-        variable_dimensions = self.state.variable_dimensions.get(variable, [])
+def get_multidimensional_ptr(state, variable, dims):
+        variable_dimensions = state.variable_dimensions.get(variable, [])
         if len(variable_dimensions) != len(dims):
             raise SemanticError('Variable dimensions mismatch for {} (expected {}, got {})'.format(variable, len(variable_dimensions), len(dims)))
         if not variable_dimensions:
@@ -219,8 +79,8 @@ class LlvmIrGenerator:
                 ptr_index.append(int(d))
             else:
                 # Convert expression result to int
-                register = '%fptoui_{}'.format(self.state.uid())
-                self.program.append('{} = fptoui double {} to i32'.format(register, d))
+                register = '%fptoui_{}'.format(state.uid())
+                state.append_instruction('{} = fptoui double {} to i32'.format(register, d))
                 ptr_index.append(register)
                 dims_is_constant_expression = False
         ptr_index = ', '.join('i32 {}'.format(x) for x in ptr_index)
@@ -231,103 +91,40 @@ class LlvmIrGenerator:
         if dims_is_constant_expression:
             result = getelementptr
         else:
-            result = '%ptr_{}'.format(self.state.uid())
-            self.program.append('{} = {}'.format(result, getelementptr))
+            result = '%ptr_{}'.format(state.uid())
+            state.append_instruction('{} = {}'.format(result, getelementptr))
         return 'double* {}, align 16'.format(result)
 
-    def end_of_variable(self, _):
-        variable, dimensions = self.state.variable_dimension_queue.pop()
-        ptr = self.get_multidimensional_ptr(variable, dimensions)
-        register = self.state.expression_variable_table.get(variable)
-        if not register:
-            register = '%{}_{}'.format(variable, self.state.uid())
-            self.program.append('{} = load double, {}'.format(register, ptr))
-        self.state.expression_operand_queue.append(register)
 
-    def evaluate_expression(self):
-        if self.is_unary_negative():
-            register = self.negate(self.state.expression_operand_queue.pop())
-        else:
-            operator = self.state.expression_operator_queue.pop()
-            operand_2, operand = self.state.expression_operand_queue.pop(), self.state.expression_operand_queue.pop()
-            if operator == '↑':
-                self.state.external_symbols.add('llvm.pow.f64')
-                register = '%pow_{}'.format(self.state.uid())
-                self.program.append('{} = tail call fast double @llvm.pow.f64(double {}, double {}) #0'.format(register, operand, operand_2))
-            else:
-                operator_to_instruction = {
-                    '+': 'fadd',
-                    '-': 'fsub',
-                    '*': 'fmul',
-                    '/': 'fdiv',
-                }
-                instruction = operator_to_instruction[operator]
-                register = '%{}_{}'.format(instruction, self.state.uid())
-                self.program.append('{} = {} fast double {}, {}'.format(register, instruction, operand, operand_2))
-        self.state.expression_operand_queue.append(register)
+def assign_to(state, lvalue):
+    if ',' not in lvalue:
+        # If lvalue is just a variable name, add other qualifiers to make it a pointer
+        lvalue = 'double* @{}, align 8'.format(lvalue)
+    state.append_instruction('store double {}, {}'.format(state.exp_result, lvalue))
 
-    def evaluate_scope(self):
-        # Evaluate until start of scope ("(" or start of expression)
-        while self.state.expression_operator_queue:
-            if self.state.expression_operator_queue[-1] == '(':
-                return
-            self.evaluate_expression()
 
-    def end_nested_expression(self, _):
-        # Check if expression was the argument of a function call
-        if self.state.expression_operator_queue and len(self.state.expression_operator_queue[-1]) > 1:
-            function = self.state.expression_operator_queue.pop()
-            self.call_function(function)
+class LlvmIrGenerator:
+    def __init__(self, filename):
+        self.state = SemanticState(os.path.basename(filename))
+        self.state.current_function = Program()
+        self.state.functions.extend((self.state.current_function, Main()))
+        self.exp = Exp(self.state)
+        self.for_statement = For(self.state)
 
-    def call_function(self, function):
-        register = '%{}_{}'.format(function, self.state.uid())
-        operand = self.state.expression_operand_queue.pop()
-        if function.startswith('FN'):
-            # Call user defined function
-            self.state.referenced_functions.add(function)
-            self.program.append('{} = tail call fast double @{}(double {}) #0'.format(register, function, operand))
-        else:
-            built_in_to_implementation = {
-                'SIN': 'llvm.sin.f64',
-                'COS': 'llvm.cos.f64',
-                'TAN': 'tan',
-                'ATN': 'atan',
-                'EXP': 'llvm.exp.f64',
-                'ABS': 'llvm.fabs.f64',
-                'LOG': 'llvm.log.f64',
-                'SQR': 'llvm.sqrt.f64',
-                'INT': 'llvm.rint.f64',
-                'RND': 'rand',
-            }
-
-            implementation = built_in_to_implementation.get(function)
-            if not implementation:
-                raise SemanticError('Unknown function identifier: {}'.format(function))
-
-            self.state.external_symbols.add(implementation)
-            if function == 'RND':
-                # Call rand, cast to double and divide by RAND_MAX (platform-specific, 2147483647 on Linux)
-                self.program.append('{}_int = call i32 @rand() #0'.format(register))
-                self.program.append('{r}_double = sitofp i32 {r}_int to double'.format(r=register))
-                self.program.append('{r} = fdiv double {r}_double, 2147483647.'.format(r=register))
-            else:
-                self.program.append('{} = tail call fast double @{}(double {}) #0'.format(register, implementation, operand))
-        self.state.expression_operand_queue.append(register)
-
-    def operator(self, operator):
-        if self.state.expression_operator_queue:
-            # If pending operators are stacked, first check if current operator can be stacked given its priority
-            queue_top_priority = operator_priority(self.state.expression_operator_queue[-1])
-            if operator_priority(operator) <= queue_top_priority:
-                # Can't stack, evaluate previous expression first
-                self.evaluate_scope()
-        self.state.expression_operator_queue.append(operator.upper())
-
-    def end_expression(self, _):
-        # Pop queued operators until '(' or start of expression is found
-        self.evaluate_scope()
-        if self.state.expression_operator_queue:
-            self.state.expression_operator_queue.pop()
+    def label(self, identifier):
+        identifier = to_int(identifier)
+        if identifier in self.state.defined_labels:
+            raise SemanticError('Duplicate label {}'.format(identifier))
+        label = 'label_{}'.format(identifier)
+        if not self.state.entry_point:
+            # First label is the entry point
+            self.state.entry_point = identifier
+        if self.state.for_context and not self.state.for_context[-1].identifier:
+            self.state.for_context[-1].identifier = identifier
+        self.state.defined_labels.add(identifier)
+        if not is_block_terminator(self.state.current_function.instructions[-1]):
+            self.state.append_instruction(lambda state: ('br label %{}'.format(label) if identifier in state.goto_targets | state.gosub_targets else None))
+        self.state.append_instruction(lambda state: ('{}:'.format(label) if identifier in state.goto_targets | state.gosub_targets | {state.entry_point} else None))
 
     def lvalue(self, variable):
         variable = variable.upper()
@@ -336,32 +133,24 @@ class LlvmIrGenerator:
         self.lvalue_dimensions = []
 
     def lvalue_dimension(self, _):
-        self.lvalue_dimensions.append(self.state.expression_operand_queue.pop())
+        self.lvalue_dimensions.append(self.state.exp_result)
 
     def lvalue_end(self, _):
-        self.lvalue_ptr = self.get_multidimensional_ptr(self.lvalue_variable, self.lvalue_dimensions)
-
-    def assign_to(self, lvalue):
-        if ',' not in lvalue:
-            # If lvalue is just a variable name, add other qualifiers to make it a pointer
-            lvalue = 'double* @{}, align 8'.format(lvalue)
-        result = self.state.expression_operand_queue.pop()
-        assert not self.state.expression_operand_queue  # queue should be empty after evaluation
-        self.program.append('store double {}, {}'.format(result, lvalue))
+        self.lvalue_ptr = get_multidimensional_ptr(self.state, self.lvalue_variable, self.lvalue_dimensions)
 
     def let_rvalue(self, _):
-        self.assign_to(self.lvalue_ptr)
+        assign_to(self.state, self.lvalue_ptr)
 
     def read_item(self, _):
         self.state.has_read = True
         i = self.state.uid()
-        self.program.append('%i_{} = load i32, i32* @data_index, align 4'.format(i))
-        self.program.append(lambda state:
+        self.state.append_instruction('%i_{} = load i32, i32* @data_index, align 4'.format(i))
+        self.state.append_instruction(lambda state:
             '%tmp_{i} = getelementptr [{len} x double], [{len} x double]* @DATA, i32 0, i32 %i_{i}'.format(len=len(state.const_data), i=i))
-        self.program.append('%data_value_{i} = load double, double* %tmp_{i}, align 16'.format(i=i))
-        self.program.append('store double %data_value_{}, {}'.format(i, self.lvalue_ptr))
-        self.program.append('%i_{i}_inc = add i32 %i_{i}, 1'.format(i=i))
-        self.program.append('store i32 %i_{}_inc, i32* @data_index, align 4'.format(i))
+        self.state.append_instruction('%data_value_{i} = load double, double* %tmp_{i}, align 16'.format(i=i))
+        self.state.append_instruction('store double %data_value_{}, {}'.format(i, self.lvalue_ptr))
+        self.state.append_instruction('%i_{i}_inc = add i32 %i_{i}, 1'.format(i=i))
+        self.state.append_instruction('store i32 %i_{}_inc, i32* @data_index, align 4'.format(i))
 
     def data_item(self, value):
         try:
@@ -371,7 +160,7 @@ class LlvmIrGenerator:
 
     def print_newline(self, _):
         self.state.external_symbols.add('putchar')
-        self.program.append('tail call i32 @putchar(i32 10) #0')
+        self.state.append_instruction('tail call i32 @putchar(i32 10) #0')
 
     def const_string(self, literal, newline=False):
         # Create a constant null-terminated string, global to this module
@@ -385,9 +174,7 @@ class LlvmIrGenerator:
         self.state.print_parameters.append(element)
 
     def print_expression_result(self, _):
-        result = self.state.expression_operand_queue.pop()
-        self.state.print_parameters.append(result)
-        assert not self.state.expression_operand_queue  # queue should be empty after evaluation
+        self.state.print_parameters.append(self.state.exp_result)
 
     def print_end(self, _, suffix=''):
         self.state.external_symbols.add('printf')
@@ -409,7 +196,7 @@ class LlvmIrGenerator:
                 va_args.append('i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {str_id}, i32 0, i32 0)'.format(len=str_len, str_id=str_id))
 
         format_string_id, length = self.const_string(' '.join(format_parameters) + suffix)
-        self.program.append(
+        self.state.append_instruction(
             'tail call i32 (i8*, ...) @printf(i8* getelementptr inbounds ([{len} x i8], [{len} x i8]* {identifier}, i32 0, i32 0), {va_args}) #0'.format(
                 len=length,
                 identifier=format_string_id,
@@ -423,11 +210,10 @@ class LlvmIrGenerator:
     def goto(self, target):
         target = to_int(target)
         self.state.goto_targets.add(target)
-        self.program.append('br label %label_{}'.format(target))
+        self.state.append_instruction('br label %label_{}'.format(target))
 
     def if_left_exp(self, _):
-        self.state.if_left_exp = self.state.expression_operand_queue.pop()
-        assert not self.state.expression_operand_queue  # queue should be empty after evaluation
+        self.state.if_left_exp = self.state.exp_result
 
     def if_operator(self, operator):
         operator_to_cond = {
@@ -444,114 +230,15 @@ class LlvmIrGenerator:
         self.state.if_cond = cond
 
     def if_right_exp(self, _):
-        if_right_exp = self.state.expression_operand_queue.pop()
-        assert not self.state.expression_operand_queue  # queue should be empty after evaluation
         self.state.if_cond_register = '%cond_{}'.format(self.state.uid())
-        self.program.append('{} = fcmp {} double {}, {}'.format(self.state.if_cond_register, self.state.if_cond, self.state.if_left_exp, if_right_exp))
+        self.state.append_instruction('{} = fcmp {} double {}, {}'.format(self.state.if_cond_register, self.state.if_cond, self.state.if_left_exp, self.state.exp_result))
 
     def if_target(self, target):
         target = to_int(target)
         self.state.goto_targets.add(target)
         if_unequal = 'cond_false_{}'.format(self.state.uid())
-        self.program.append('br i1 {}, label %label_{}, label %{}'.format(self.state.if_cond_register, target, if_unequal))
-        self.program.append('{}:'.format(if_unequal))
-
-    def for_variable(self, variable):
-        variable = variable.upper()
-        self.state.variables.add(variable)
-        self.state.for_context.append(ForContext(variable))
-
-    def for_left_exp(self, _):
-        self.assign_to(self.state.for_context[-1].variable)
-
-    def for_right_exp(self, _):
-        if isinstance(self.state.expression_operand_queue[-1], float):
-            # Literal number
-            end = self.state.expression_operand_queue.pop()
-        else:
-            right_exp_variable = 'for_{}_end_{}'.format(self.state.for_context[-1].variable, self.state.uid())
-            self.state.private_globals.append('@{} = internal global double 0., align 8'.format(right_exp_variable))
-            self.assign_to(right_exp_variable)
-            end = right_exp_variable
-        self.state.for_context[-1].end = end
-
-    def for_step_value(self, value):
-        if isinstance(value, float):
-            # Implicit 1 step
-            step = value
-        elif isinstance(self.state.expression_operand_queue[-1], float):
-            # Literal number step
-            step = self.state.expression_operand_queue.pop()
-        else:
-            variable = self.state.for_context[-1].variable
-            step = 'for_{}_step_{}'.format(variable, self.state.uid())
-            self.state.private_globals.append('@{} = internal global double 0., align 8'.format(step))
-            self.assign_to(step)
-        self.state.for_context[-1].step = step
-
-    def next(self, variable):
-        variable = variable.upper()
-        if not self.state.for_context:
-            raise SemanticError('NEXT has no matching FOR')
-        for_context = self.state.for_context.pop()
-        if variable != for_context.variable:
-            raise SemanticError('NEXT and matching FOR have different counter variables ({} and {})'.format(variable, for_context.variable))
-
-        step = for_context.step
-        identifier = for_context.identifier
-        end = for_context.end
-        self.state.goto_targets.add(identifier)
-        label = 'label_{}'.format(identifier)
-        old_value = '{}_{}'.format(variable, self.state.uid())
-        self.program.append('%{} = load double, double* @{}, align 8'.format(old_value, variable))
-        new_value = 'new_{}_{}'.format(variable, self.state.uid())
-        if isinstance(step, float):
-            step_value = step
-        else:
-            # Load step
-            step_value = '%step_{}'.format(self.state.uid())
-            self.program.append('{} = load double, double* @{}, align 8'.format(step_value, step))
-        # Update variable by step
-        self.program.append('%{} = fadd fast double %{}, {}'.format(new_value, old_value, step_value))
-        self.program.append('store double %{}, double* @{}, align 8'.format(new_value, variable))
-        # Load end value
-        if isinstance(end, float):
-            end_value = end
-        else:
-            end_value = '%end_{}_{}'.format(variable, self.state.uid())
-            self.program.append('{} = load double, double* @{}, align 8'.format(end_value, end))
-        will_jump = 'will_jump_{}'.format(self.state.uid())
-        for_exit = 'for_exit_{}'.format(self.state.uid())
-        if isinstance(step, float):
-            # Step is a literal, so generate a different code path based on its sign
-            if step > 0:
-                # If new_value <= end, jump to loop, else continue execution
-                self.program.append('%{} = fcmp ole double %{}, {}'.format(will_jump, new_value, end_value))
-                self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
-            else:
-                # If new_value >= end, jump to loop, else continue execution
-                self.program.append('%{} = fcmp oge double %{}, {}'.format(will_jump, new_value, end_value))
-                self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
-        else:
-            # Step is an expression, generate code to check its sign
-            sign = 'step_sign_{}'.format(self.state.uid())
-            positive = 'positive_{}'.format(self.state.uid())
-            negative = 'negative_{}'.format(self.state.uid())
-            self.program.append('%{} = fcmp oge double {}, 0.'.format(sign, step_value))
-            self.program.append('br i1 %{}, label %{}, label %{}'.format(sign, positive, negative))
-            # If step >= 0
-            self.program.append('{}:'.format(positive))
-            # If new_value <= end, jump to loop, else continue execution
-            self.program.append('%{} = fcmp ole double %{}, {}'.format(will_jump, new_value, end_value))
-            self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump, label, for_exit))
-            # step < 0
-            self.program.append('{}:'.format(negative))
-            # If new_value >= end, jump to loop, else continue execution
-            will_jump_2 = 'will_jump_2_{}'.format(self.state.uid())
-            self.program.append('%{} = fcmp oge double %{}, {}'.format(will_jump_2, new_value, end_value))
-            self.program.append('br i1 %{}, label %{}, label %{}'.format(will_jump_2, label, for_exit))
-        # Exit of for loop
-        self.program.append('{}:'.format(for_exit))
+        self.state.append_instruction('br i1 {}, label %label_{}, label %{}'.format(self.state.if_cond_register, target, if_unequal))
+        self.state.append_instruction('{}:'.format(if_unequal))
 
     def dim_dimension(self, dimension):
         self.lvalue_dimensions.append(dimension)
@@ -563,31 +250,31 @@ class LlvmIrGenerator:
     def def_identifier(self, identifier):
         f = Function(identifier, return_type='double', arguments='double %arg')
         self.state.functions.append(f)
-        self.program = f
+        self.state.current_function = f
 
     def def_parameter(self, variable):
-        self.state.expression_variable_table = {variable.upper(): '%arg'}
+        self.state.loaded_variables = {variable.upper(): '%arg'}
 
     def def_exp(self, exp):
-        self.state.expression_variable_table = {}
-        self.program.append('ret double {}'.format(self.state.expression_operand_queue.pop()))
-        self.program = self.state.functions[0]
+        self.state.loaded_variables = {}
+        self.state.append_instruction('ret double {}'.format(self.state.exp_result))
+        self.state.current_function = self.state.functions[0]
 
     def gosub(self, target):
         target = to_int(target)
         self.state.gosub_targets.add(target)
-        self.program.append('tail call void @program(i8* blockaddress(@program, %label_{})) #0'.format(target))
+        self.state.append_instruction('tail call void @program(i8* blockaddress(@program, %label_{})) #0'.format(target))
 
     def return_statement(self, token):
-        self.program.append('ret void')
+        self.state.append_instruction('ret void')
 
     def remark(self, text):
-        self.program.append(';{}'.format(text[3:]))
+        self.state.append_instruction(';{}'.format(text[3:]))
 
     def end(self, event):
         self.state.external_symbols.add('exit')
-        self.program.append('tail call void @exit(i32 0) noreturn #0')
-        self.program.append('unreachable')
+        self.state.append_instruction('tail call void @exit(i32 0) noreturn #0')
+        self.state.append_instruction('unreachable')
 
     def external_symbols_declarations(self):
         DECLARATIONS = {

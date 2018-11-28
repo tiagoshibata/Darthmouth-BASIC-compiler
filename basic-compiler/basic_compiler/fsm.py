@@ -15,6 +15,15 @@ def find_transition(transition_list, event):
                  if not x.event or isinstance(x.event, Fsm) or x.event == case_insensitive_event or isinstance(x.event, str) and x.event == event[0]), None)
 
 
+def call_semantic_action(f, event):
+    if not f:
+        return
+    try:
+        f(event[1])
+    except TypeError:
+        f()
+
+
 class Fsm:
     def __init__(self, states):
         self.states = states
@@ -49,8 +58,8 @@ class Fsm:
             if self.on_success is None:
                 self.reset()
                 self.transition(event)
-            elif self.on_success:
-                self.on_success(event[1])
+            else:
+                call_semantic_action(self.on_success, event)
             return identified_token
         self.current_state_name = next_transition.to
         if isinstance(next_transition.event, Fsm):
@@ -59,7 +68,7 @@ class Fsm:
             self.sub_fsm.on_success = next_transition.semantic_action or False
             return self.transition(event)
         if next_transition.semantic_action:
-            next_transition.semantic_action(event[1])
+            call_semantic_action(next_transition.semantic_action, event)
         if not next_transition.event:
             # Empty transition, don't consume the token yet
             return self.transition(event)

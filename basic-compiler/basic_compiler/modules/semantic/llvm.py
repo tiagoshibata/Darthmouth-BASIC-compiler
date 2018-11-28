@@ -66,36 +66,40 @@ def dimensions_specifier(dimensions):
     return '[{} x {}]'.format(dimensions[0], dimensions_specifier(dimensions[1:]))
 
 
-def get_multidimensional_ptr(state, variable, dims):
-        variable_dimensions = state.variable_dimensions.get(variable, [])
-        if len(variable_dimensions) != len(dims):
-            raise SemanticError('Variable dimensions mismatch for {} (expected {}, got {})'.format(variable, len(variable_dimensions), len(dims)))
-        if not variable_dimensions:
-            return 'double* @{}, align 8'.format(variable)
-        # Multidimensional, convert operands to int and call getelementptr
-        ptr_index = []
-        dims_is_constant_expression = True
-        for d in dims:
-            if isinstance(d, float):
-                # Number literal
-                ptr_index.append(int(d))
-            else:
-                # Convert expression result to int
-                register = '%fptoui_{}'.format(state.uid())
-                state.append_instruction('{} = fptoui double {} to i32'.format(register, d))
-                ptr_index.append(register)
-                dims_is_constant_expression = False
-        ptr_index = ', '.join('i32 {}'.format(x) for x in ptr_index)
-        getelementptr = 'getelementptr inbounds {dims}, {dims}* @{var}, i32 0, {index}'.format(
-            dims=dimensions_specifier(variable_dimensions),
-            var=variable,
-            index=ptr_index)
-        if dims_is_constant_expression:
-            result = getelementptr
+def get_variable_ptr(state, variable, dims):
+    '''Return a pointer to a variable, indexed at dims.
+
+    If dims is empty, return a pointer to the scalar in argument variable.'''
+    variable_dimensions = state.variable_dimensions.get(variable, [])
+    if len(variable_dimensions) != len(dims):
+        raise SemanticError(
+            'Variable dimensions mismatch for {} (expected {}, got {})'.format(variable, len(variable_dimensions), len(dims)))
+    if not variable_dimensions:
+        return 'double* @{}, align 8'.format(variable)
+    # Multidimensional, convert operands to int and call getelementptr
+    ptr_index = []
+    dims_is_constant_expression = True
+    for d in dims:
+        if isinstance(d, float):
+            # Number literal
+            ptr_index.append(int(d))
         else:
-            result = '%ptr_{}'.format(state.uid())
-            state.append_instruction('{} = {}'.format(result, getelementptr))
-        return 'double* {}, align 16'.format(result)
+            # Convert expression result to int
+            register = '%fptoui_{}'.format(state.uid())
+            state.append_instruction('{} = fptoui double {} to i32'.format(register, d))
+            ptr_index.append(register)
+            dims_is_constant_expression = False
+    ptr_index = ', '.join('i32 {}'.format(x) for x in ptr_index)
+    getelementptr = 'getelementptr inbounds {dims}, {dims}* @{var}, i32 0, {index}'.format(
+        dims=dimensions_specifier(variable_dimensions),
+        var=variable,
+        index=ptr_index)
+    if dims_is_constant_expression:
+        result = getelementptr
+    else:
+        result = '%ptr_{}'.format(state.uid())
+        state.append_instruction('{} = {}'.format(result, getelementptr))
+    return 'double* {}, align 16'.format(result)
 
 
 def assign_to(state, lvalue):
@@ -140,7 +144,7 @@ class LlvmIrGenerator:
         self.lvalue_dimensions.append(self.state.exp_result)
 
     def lvalue_end(self):
-        self.lvalue_ptr = get_multidimensional_ptr(self.state, self.lvalue_variable, self.lvalue_dimensions)
+        self.lvalue_ptr = get_variable_ptr(self.state, self.lvalue_variable, self.lvalue_dimensions)
 
     def let_rvalue(self):
         assign_to(self.state, self.lvalue_ptr)

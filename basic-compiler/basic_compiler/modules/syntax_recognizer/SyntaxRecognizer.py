@@ -45,6 +45,7 @@ class SyntaxRecognizer(EventDrivenModule):
             'function_call': State(None, [
                 Transition(('special', '('), 'nested_expression', self.ir_generator.exp.operator),
             ]),
+
             'end_expression': State(None, [
                 Transition(('special', '+'), 'start_expression', self.ir_generator.exp.operator),
                 Transition(('special', '-'), 'start_expression', self.ir_generator.exp.operator),

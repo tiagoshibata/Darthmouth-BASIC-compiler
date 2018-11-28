@@ -11,10 +11,10 @@ def to_double(number):
 
 def operator_priority(operator):
     # Functions have lower priority than "(", but higher than "n"
-    if len(operator) == 3:
+    if operator[0].isalpha():
         return 4
-    # 'n' represents the negative sign leading an expression (unary -)
-    PRIORITY = [('+', '-'), ('*', '/'), ('↑',), ('n',), ('function',), ('(',)]
+    # '-u' represents the negative sign leading an expression (unary -)
+    PRIORITY = [('+', '-'), ('*', '/'), ('↑',), ('-u',), ('function',), ('(',)]
     return next((i for i, x in enumerate(PRIORITY) if operator in x))
 
 
@@ -23,17 +23,16 @@ class Exp:
         self.state = state
         self.operator_queue = []
         self.operand_queue = []
-        self.variable_dimension_queue = []
 
     def is_unary_negative(self):
-        if self.operator_queue and self.operator_queue[-1] == 'n':
+        if self.operator_queue and self.operator_queue[-1] == '-u':
             self.operator_queue.pop()
             return True
         return False
 
     def negative_expression(self):
         if not self.is_unary_negative():
-            self.operator_queue.append('n')
+            self.operator_queue.append('-u')
 
     def number(self, number):
         number = to_double(number)
@@ -45,17 +44,22 @@ class Exp:
     def variable(self, variable):
         variable = variable.upper()
         self.state.variables.add(variable)
-        self.variable_dimension_queue.append((variable, []))
+        self.operand_queue.append(variable)
 
     def variable_dimension(self):
-        self.variable_dimension_queue[-1][1].append(self.state.exp_result)
+        self.operator_queue.append(',')
+        self.operand_queue.append(self.state.exp_result)
 
     def end_of_variable(self):
-        variable, dimensions = self.variable_dimension_queue.pop()
-        ptr = llvm.get_multidimensional_ptr(self.state, variable, dimensions)
+        dimensions = []
+        while self.operator_queue and self.operator_queue[-1] == ',':
+            self.operator_queue.pop()
+            dimensions.insert(0, self.operand_queue.pop())
+        variable = self.operand_queue.pop()
         register = self.state.loaded_variables.get(variable)
         if not register:
             register = '%{}_{}'.format(variable, self.state.uid())
+            ptr = llvm.get_variable_ptr(self.state, variable, dimensions)
             self.state.append_instruction('{} = load double, {}'.format(register, ptr))
         self.operand_queue.append(register)
 
@@ -109,7 +113,6 @@ class Exp:
             self.operator_queue.pop()
         else:
             self.state.exp_result = self.operand_queue.pop()
-            assert not self.operand_queue  # must be empty after evaluation
 
     def call_function(self, function):
         register = '%{}_{}'.format(function, self.state.uid())
@@ -148,6 +151,6 @@ class Exp:
 
     def end_nested_expression(self):
         # Check if expression was the argument of a function call
-        if self.operator_queue and len(self.operator_queue[-1]) > 1:
+        if self.operator_queue and self.operator_queue[-1][0].isalpha():
             function = self.operator_queue.pop()
             self.call_function(function)

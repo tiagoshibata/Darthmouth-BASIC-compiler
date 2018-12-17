@@ -1,6 +1,6 @@
 from collections import namedtuple
 
-State = namedtuple('State', ['token_type', 'transitions'], defaults=(None, []))
+State = namedtuple('State', ['accept', 'transitions'], defaults=(None, []))
 Transition = namedtuple('Transition', ['event', 'to', 'semantic_action'], defaults=([], None))
 
 
@@ -51,10 +51,10 @@ class Fsm:
         identified_token = None
         if next_transition is None:
             # Longest path found
-            if not current_state.token_type:
+            if not current_state.accept:
                 raise FsmError('No valid transition for {}'.format(event))
             # Return token class and value
-            identified_token = (current_state.token_type, ''.join(self.current_token))
+            identified_token = (current_state.accept, ''.join(self.current_token))
             if self.on_success is None:
                 self.reset()
                 self.transition(event)

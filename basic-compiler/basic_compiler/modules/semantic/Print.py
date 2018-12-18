@@ -1,6 +1,7 @@
 class Print:
     def __init__(self, state):
         self.state = state
+        self.print_parameters = []
 
     def newline(self):
         self.state.external_symbols.add('putchar')
@@ -17,17 +18,17 @@ class Print:
         return string_constant_identifier, string_length
 
     def string(self, element):
-        self.state.print_parameters.append(element)
+        self.print_parameters.append(element)
 
     def expression_result(self):
-        self.state.print_parameters.append(self.state.exp_result)
+        self.print_parameters.append(self.state.exp_result)
 
     def end(self, _, suffix=''):
         self.state.external_symbols.add('printf')
 
         format_parameters = []
         va_args = []
-        for element in self.state.print_parameters:
+        for element in self.print_parameters:
             if isinstance(element, float) or element.startswith('%'):
                 # Print number literal or local register
                 format_parameters.append('%f')
@@ -48,7 +49,7 @@ class Print:
                 identifier=format_string_id,
                 va_args=', '.join(va_args),
             ))
-        self.state.print_parameters = []
+        self.print_parameters = []
 
     def end_with_newline(self):
         self.end(None, suffix='\\0A')

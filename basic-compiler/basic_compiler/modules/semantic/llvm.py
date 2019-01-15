@@ -37,13 +37,8 @@ class SemanticState:
         self.private_globals = []
         self.external_symbols = set()
         self.loaded_variables = {}
-        self.print_parameters = []
-        self.if_left_exp = None
-        self.if_cond = None
-        self.if_cond_register = None
         self.for_context = []
         self.variable_dimensions = {}
-        self.remark = []
 
     def uid(self):
         self.uid_count += 1
